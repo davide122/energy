@@ -1,0 +1,139 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Cliente {
+  id        String   @id @default(cuid())
+  nome      String
+  cognome   String
+  email     String?  @unique
+  telefono  String?
+  indirizzo String?
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relazioni
+  contratti Contratto[]
+
+  @@map("clienti")
+}
+
+model Fornitore {
+  id             String   @id @default(cuid())
+  ragioneSociale String
+  tipo           TipoFornitore
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relazioni
+  contratti       Contratto[]
+  storicoContratti StoricoContratto[]
+
+  @@map("fornitori")
+}
+
+model Contratto {
+  id                    String   @id @default(cuid())
+  clienteId             String
+  fornitoreId           String
+  startDate             DateTime
+  durataMesi            Int
+  penaltyFreeAfterMesi  Int      @default(6)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Campi calcolati (computed fields)
+  penaltyFreeDate       DateTime?
+  recommendedDate       DateTime?
+  expiryDate            DateTime?
+
+  // Relazioni
+  cliente               Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  fornitore             Fornitore @relation(fields: [fornitoreId], references: [id])
+  storicoContratti      StoricoContratto[]
+  notifiche             Notifica[]
+
+  @@map("contratti")
+}
+
+model StoricoContratto {
+  id          String    @id @default(cuid())
+  contrattoId String
+  fornitoreId String
+  startDate   DateTime
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relazioni
+  contratto   Contratto @relation(fields: [contrattoId], references: [id], onDelete: Cascade)
+  fornitore   Fornitore @relation(fields: [fornitoreId], references: [id])
+
+  @@map("storico_contratti")
+}
+
+model Notifica {
+  id            String         @id @default(cuid())
+  contrattoId   String
+  tipo          TipoNotifica
+  scheduledDate DateTime
+  channel       ChannelNotifica @default(EMAIL)
+  status        StatusNotifica  @default(PENDING)
+  sentAt        DateTime?
+  errorMessage  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relazioni
+  contratto     Contratto      @relation(fields: [contrattoId], references: [id], onDelete: Cascade)
+
+  @@map("notifiche")
+}
+
+enum TipoFornitore {
+  LUCE
+  GAS
+  LUCE_GAS
+}
+
+enum TipoNotifica {
+  PENALTY_FREE
+  RECOMMENDED
+  EXPIRY
+}
+
+enum ChannelNotifica {
+  EMAIL
+  SMS
+  WHATSAPP
+  DASHBOARD
+}
+
+enum StatusNotifica {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}

@@ -29,7 +29,7 @@ import { format, differenceInDays } from 'date-fns'
 import { it } from 'date-fns/locale'
 
 export default function ContrattoDettaglio() {
-  const { data: session, status } = useSession()
+  const { data: session, status: sessionStatus } = useSession()
   const router = useRouter()
   const params = useParams()
   const contrattoId = params.id
@@ -41,10 +41,10 @@ export default function ContrattoDettaglio() {
   const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (sessionStatus === 'unauthenticated') {
       redirect('/auth/signin')
     }
-  }, [status])
+  }, [sessionStatus])
 
   useEffect(() => {
     if (session && contrattoId) {
@@ -130,7 +130,7 @@ export default function ContrattoDettaglio() {
     }
   }
 
-  if (status === 'loading' || loading) {
+  if (sessionStatus === 'loading' || loading) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-64">

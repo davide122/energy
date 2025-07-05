@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import Layout from '@/components/Layout'
+import Layout from '../../components/Layout'
 import {
   Search,
   Filter,

@@ -232,7 +232,7 @@ export async function POST(request) {
 
     console.error('Errore POST contratto:', error)
     return NextResponse.json(
-      { error: 'Errore interno del server' },
+      { error: 'Errore interno del serverr' },
       { status: 500 }
     )
   }

@@ -60,12 +60,18 @@ export default function NuovoFornitore() {
     setSubmitError(null)
     
     try {
+      // Trasforma i valori del tipo in maiuscolo per l'API
+      const dataToSend = {
+        ...formData,
+        tipo: formData.tipo.toUpperCase()
+      }
+      
       const response = await fetch('/api/fornitori', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(dataToSend)
       })
       
       if (!response.ok) {
@@ -162,7 +168,7 @@ export default function NuovoFornitore() {
                       />
                       <div className="flex items-center">
                         <Zap className={`h-6 w-6 mr-3 ${
-                          formData.tipo === 'luce' ? 'text-yellow-600' : 'text-gray-400'
+                          formData.tipo === 'LUCE' ? 'text-yellow-600' : 'text-gray-400'
                         }`} />
                         <div>
                           <p className="font-medium text-gray-900">Energia Elettrica</p>
@@ -177,7 +183,7 @@ export default function NuovoFornitore() {
                     </label>
                     
                     <label className={`relative flex items-center p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                      formData.tipo === 'gas' 
+                      formData.tipo === 'GAS' 
                         ? 'border-blue-500 bg-blue-50' 
                         : 'border-gray-200 hover:border-gray-300'
                     }`}>

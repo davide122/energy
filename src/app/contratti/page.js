@@ -175,16 +175,55 @@ export default function Contratti() {
 
   const getContractStatus = (contratto) => {
     const today = new Date()
+    const startDate = new Date(contratto.startDate)
     const expiryDate = new Date(contratto.expiryDate)
     const penaltyFreeDate = new Date(contratto.penaltyFreeDate)
     const recommendedDate = new Date(contratto.recommendedDate)
+    
+    // Verifica che le date siano valide
+    const isStartValid = !isNaN(startDate.getTime())
+    const isExpiryValid = !isNaN(expiryDate.getTime())
+    const isPenaltyFreeValid = !isNaN(penaltyFreeDate.getTime())
+    const isRecommendedValid = !isNaN(recommendedDate.getTime())
+    
+    // Se la data di scadenza non è valida, mostra un errore
+    if (!isExpiryValid) {
+      return { status: 'errore-data', color: 'badge-danger', icon: AlertTriangle, priority: 4, bgColor: 'bg-red-50', canChange: false }
+    }
+    
     const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
     
-    if (daysLeft <= 0) return { status: 'scaduto', color: 'badge-danger', icon: AlertTriangle }
-    if (daysLeft <= 30) return { status: 'in-scadenza', color: 'badge-warning', icon: AlertTriangle }
-    if (today >= recommendedDate) return { status: 'cambio-consigliato', color: 'badge-info', icon: Clock }
-    if (today >= penaltyFreeDate) return { status: 'penalty-free', color: 'badge-info', icon: CheckCircle }
-    return { status: 'attivo', color: 'badge-success', icon: CheckCircle }
+    // Calcola i mesi dall'inizio del contratto
+    let monthsFromStart = 0
+    if (isStartValid) {
+      const diffTime = today - startDate
+      monthsFromStart = diffTime / (1000 * 60 * 60 * 24 * 30.44) // Media giorni per mese
+    }
+    
+    // Priorità: 1 = più alta (giallo - modificabili), 2 = media (rosso - scadenza), 3 = bassa (bianco - nuovi)
+    if (daysLeft <= 0) {
+      return { status: 'scaduto', color: 'badge-danger', icon: AlertTriangle, priority: 2, bgColor: 'bg-red-100', canChange: false }
+    }
+    
+    if (daysLeft <= 30) {
+      return { status: 'in-scadenza', color: 'badge-danger', icon: AlertTriangle, priority: 2, bgColor: 'bg-red-100', canChange: false }
+    }
+    
+    // Contratti modificabili (oltre 6 mesi dall'inizio) - PRIORITÀ MASSIMA
+    if (monthsFromStart >= 6) {
+      return { status: 'modificabile', color: 'badge-warning', icon: Clock, priority: 1, bgColor: 'bg-yellow-100', canChange: true }
+    }
+    
+    // Altri stati con priorità normale
+    if (isRecommendedValid && today >= recommendedDate) {
+      return { status: 'cambio-consigliato', color: 'badge-info', icon: Clock, priority: 3, bgColor: 'bg-white', canChange: false }
+    }
+    
+    if (isPenaltyFreeValid && today >= penaltyFreeDate) {
+      return { status: 'penalty-free', color: 'badge-info', icon: CheckCircle, priority: 3, bgColor: 'bg-white', canChange: false }
+    }
+    
+    return { status: 'attivo', color: 'badge-success', icon: CheckCircle, priority: 3, bgColor: 'bg-white', canChange: false }
   }
 
   const getStatusLabel = (status) => {
@@ -193,10 +232,25 @@ export default function Contratti() {
       'penalty-free': 'Penalty Free',
       'cambio-consigliato': 'Cambio Consigliato',
       'in-scadenza': 'In Scadenza',
-      'scaduto': 'Scaduto'
+      'scaduto': 'Scaduto',
+      'errore-data': 'Errore Data',
+      'modificabile': 'Modificabile'
     }
     return labels[status] || status
   }
+
+  // Ordina i contratti per priorità
+  const sortedContratti = [...contratti].sort((a, b) => {
+    const statusA = getContractStatus(a)
+    const statusB = getContractStatus(b)
+    return statusA.priority - statusB.priority
+  })
+
+  // Conta i contratti modificabili per l'alert
+  const contrattiModificabili = contratti.filter(contratto => {
+    const status = getContractStatus(contratto)
+    return status.canChange
+  })
 
   if (status === 'loading' || loading) {
     return (
@@ -226,6 +280,23 @@ export default function Contratti() {
             <span>Nuovo Contratto</span>
           </Link>
         </div>
+
+        {/* Alert per contratti modificabili */}
+        {contrattiModificabili.length > 0 && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+            <div className="flex items-center">
+              <AlertTriangle className="h-5 w-5 text-yellow-400 mr-3" />
+              <div>
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Contratti Modificabili Disponibili
+                </h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  Hai {contrattiModificabili.length} contratto{contrattiModificabili.length > 1 ? 'i' : ''} che pu{contrattiModificabili.length > 1 ? 'ò' : 'ò'} essere modificat{contrattiModificabili.length > 1 ? 'i' : 'o'} (oltre 6 mesi dall'attivazione).
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Barra di ricerca e filtri */}
         <div className="card">
@@ -320,11 +391,12 @@ export default function Contratti() {
                     className="input"
                   >
                     <option value="">Tutti gli stati</option>
+                    <option value="modificabile">Modificabile</option>
+                    <option value="in-scadenza">In Scadenza</option>
+                    <option value="scaduto">Scaduto</option>
                     <option value="attivo">Attivo</option>
                     <option value="penalty-free">Penalty Free</option>
                     <option value="cambio-consigliato">Cambio Consigliato</option>
-                    <option value="in-scadenza">In Scadenza</option>
-                    <option value="scaduto">Scaduto</option>
                   </select>
                 </div>
                 
@@ -397,13 +469,23 @@ export default function Contratti() {
                     </tr>
                   </thead>
                   <tbody>
-                    {contratti.map((contratto) => {
+                    {sortedContratti.map((contratto) => {
                       const status = getContractStatus(contratto)
                       const StatusIcon = status.icon
-                      const daysLeft = Math.ceil((new Date(contratto.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
+                      
+                      // Calcola i giorni rimanenti solo se la data di scadenza è valida
+                      let daysLeft = null
+                      try {
+                        const expiryDate = new Date(contratto.expiryDate)
+                        if (!isNaN(expiryDate.getTime())) {
+                          daysLeft = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24))
+                        }
+                      } catch (e) {
+                        // Errore nel calcolo dei giorni rimanenti
+                      }
                       
                       return (
-                        <tr key={contratto.id} className="hover:bg-gray-50">
+                        <tr key={contratto.id} className={`hover:bg-gray-50 ${status.bgColor} ${status.canChange ? 'border-l-4 border-yellow-400' : ''}`}>
                           <td>
                             <div>
                               <p className="font-medium">
@@ -416,7 +498,7 @@ export default function Contratti() {
                             <div className="flex items-center space-x-2">
                               <span className="font-medium">{contratto.fornitore.ragioneSociale}</span>
                               <span className={`text-xs px-2 py-1 rounded ${
-                                contratto.fornitore.tipo === 'luce' 
+                                contratto.fornitore.tipo && contratto.fornitore.tipo.toUpperCase() === 'LUCE' 
                                   ? 'bg-yellow-100 text-yellow-800' 
                                   : 'bg-blue-100 text-blue-800'
                               }`}>
@@ -426,9 +508,31 @@ export default function Contratti() {
                           </td>
                           <td>
                             <div className="text-sm">
-                              <div>{format(new Date(contratto.startDate), 'dd/MM/yyyy')}</div>
+                              <div>
+                                {(() => {
+                                  try {
+                                    const startDate = new Date(contratto.startDate)
+                                    if (isNaN(startDate.getTime())) {
+                                      return 'Data non valida'
+                                    }
+                                    return format(startDate, 'dd/MM/yyyy', { locale: it })
+                                  } catch (e) {
+                                    return 'Data non valida'
+                                  }
+                                })()}
+                              </div>
                               <div className="text-gray-500">
-                                {format(new Date(contratto.expiryDate), 'dd/MM/yyyy')}
+                                {(() => {
+                                  try {
+                                    const expiryDate = new Date(contratto.expiryDate)
+                                    if (isNaN(expiryDate.getTime())) {
+                                      return 'Data non valida'
+                                    }
+                                    return format(expiryDate, 'dd/MM/yyyy', { locale: it })
+                                  } catch (e) {
+                                    return 'Data non valida'
+                                  }
+                                })()}
                               </div>
                             </div>
                           </td>
@@ -437,7 +541,13 @@ export default function Contratti() {
                           </td>
                           <td>
                             <span className="text-sm">
-                              {daysLeft > 0 ? `${daysLeft} giorni` : 'Scaduto'}
+                              {daysLeft === null ? (
+                                <span className="text-red-500">Data non valida</span>
+                              ) : daysLeft > 0 ? (
+                                `${daysLeft} giorni`
+                              ) : (
+                                'Scaduto'
+                              )}
                             </span>
                           </td>
                           <td>
@@ -446,6 +556,11 @@ export default function Contratti() {
                               <span className={`badge ${status.color}`}>
                                 {getStatusLabel(status.status)}
                               </span>
+                              {status.canChange && (
+                                <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full font-medium">
+                                  MODIFICABILE
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td>

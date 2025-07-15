@@ -20,6 +20,7 @@ import {
   Flame
 } from 'lucide-react'
 import { format, addMonths } from 'date-fns'
+import { it } from 'date-fns/locale'
 
 export default function ModificaContratto() {
   const { data: session, status } = useSession()
@@ -71,8 +72,48 @@ export default function ModificaContratto() {
     setHasChanges(hasFormChanges)
   }, [formData, originalData])
 
+  // Calcola le date del contratto
   useEffect(() => {
-    calculateDates()
+    if (formData.startDate && formData.durataMesi) {
+      try {
+        // Verifica che la data di inizio sia valida
+        const start = new Date(formData.startDate)
+        if (isNaN(start.getTime())) {
+          console.error('Data di inizio non valida');
+          return;
+        }
+        
+        // Converti i valori a numeri interi
+        const durataMesi = parseInt(formData.durataMesi) || 12;
+        const penaltyFreeAfterMesi = parseInt(formData.penaltyFreeAfterMesi) || 6;
+        
+        // Crea nuove istanze di Date per evitare riferimenti condivisi
+        const penaltyFreeDate = new Date(start)
+        penaltyFreeDate.setMonth(start.getMonth() + penaltyFreeAfterMesi)
+        
+        const recommendedDate = new Date(start)
+        // Il cambio consigliato è 2 mesi prima della scadenza o dopo il penalty free, il più recente dei due
+        const mesiRecommended = Math.max(penaltyFreeAfterMesi, durataMesi - 2)
+        recommendedDate.setMonth(start.getMonth() + mesiRecommended)
+        
+        const expiryDate = new Date(start)
+        expiryDate.setMonth(start.getMonth() + durataMesi)
+        
+        // Verifica che le date calcolate siano valide
+        if (isNaN(penaltyFreeDate.getTime()) || isNaN(recommendedDate.getTime()) || isNaN(expiryDate.getTime())) {
+          console.error('Errore nel calcolo delle date');
+          return;
+        }
+        
+        setCalculatedDates({
+          penaltyFreeDate: format(penaltyFreeDate, 'yyyy-MM-dd'),
+          recommendedDate: format(recommendedDate, 'yyyy-MM-dd'),
+          expiryDate: format(expiryDate, 'yyyy-MM-dd')
+        })
+      } catch (error) {
+        console.error('Errore nel calcolo delle date:', error);
+      }
+    }
   }, [formData.startDate, formData.durataMesi, formData.penaltyFreeAfterMesi])
 
   const fetchContratto = async () => {
@@ -124,20 +165,7 @@ export default function ModificaContratto() {
     }
   }
 
-  const calculateDates = () => {
-    if (!formData.startDate) return
-    
-    const startDate = new Date(formData.startDate)
-    const penaltyFreeDate = addMonths(startDate, formData.penaltyFreeAfterMesi)
-    const recommendedDate = addMonths(startDate, 10) // Fisso a 10 mesi
-    const expiryDate = addMonths(startDate, formData.durataMesi)
-    
-    setCalculatedDates({
-      penaltyFreeDate: format(penaltyFreeDate, 'yyyy-MM-dd'),
-      recommendedDate: format(recommendedDate, 'yyyy-MM-dd'),
-      expiryDate: format(expiryDate, 'yyyy-MM-dd')
-    })
-  }
+  // Funzione per calcolare le date - non più utilizzata, sostituita dall'useEffect
 
   const validateForm = () => {
     const errors = {}
@@ -198,12 +226,38 @@ export default function ModificaContratto() {
       setSaving(true)
       setError(null)
       
+      // Verifica che la data di inizio sia valida
+      const startDate = new Date(formData.startDate)
+      if (isNaN(startDate.getTime())) {
+        throw new Error('Data di inizio non valida')
+      }
+      
+      // Converti i valori a numeri interi
+      const durataMesi = parseInt(formData.durataMesi)
+      const penaltyFreeAfterMesi = parseInt(formData.penaltyFreeAfterMesi)
+      
+      if (isNaN(durataMesi) || durataMesi <= 0) {
+        throw new Error('Durata mesi non valida')
+      }
+      
+      if (isNaN(penaltyFreeAfterMesi) || penaltyFreeAfterMesi < 0) {
+        throw new Error('Periodo penalty free non valido')
+      }
+      
+      // Converti la data nel formato ISO datetime
+      const dataToSend = {
+        ...formData,
+        durataMesi,
+        penaltyFreeAfterMesi,
+        startDate: startDate.toISOString()
+      }
+      
       const response = await fetch(`/api/contratti/${contrattoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(dataToSend)
       })
       
       if (!response.ok) {
@@ -230,11 +284,15 @@ export default function ModificaContratto() {
   }
 
   const getTipoIcon = (tipo) => {
-    return tipo === 'luce' ? Zap : Flame
+    // Normalizza il tipo in maiuscolo per il confronto
+    const tipoUpper = tipo ? tipo.toUpperCase() : ''
+    return tipoUpper === 'LUCE' ? Zap : Flame
   }
 
   const getTipoColor = (tipo) => {
-    return tipo === 'luce' ? 'text-yellow-600' : 'text-blue-600'
+    // Normalizza il tipo in maiuscolo per il confronto
+    const tipoUpper = tipo ? tipo.toUpperCase() : ''
+    return tipoUpper === 'LUCE' ? 'text-yellow-600' : 'text-blue-600'
   }
 
   const selectedCliente = clienti.find(c => c.id === formData.clienteId)
@@ -470,7 +528,7 @@ export default function ModificaContratto() {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Inizio:</span>
                     <span className="font-medium">
-                      {format(new Date(formData.startDate), 'dd/MM/yyyy')}
+                      {format(new Date(formData.startDate), 'dd/MM/yyyy', { locale: it })}
                     </span>
                   </div>
                   
@@ -478,7 +536,7 @@ export default function ModificaContratto() {
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Penalty Free:</span>
                       <span className="font-medium text-green-600">
-                        {format(new Date(calculatedDates.penaltyFreeDate), 'dd/MM/yyyy')}
+                        {format(new Date(calculatedDates.penaltyFreeDate), 'dd/MM/yyyy', { locale: it })}
                       </span>
                     </div>
                   )}
@@ -487,7 +545,7 @@ export default function ModificaContratto() {
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Cambio Consigliato:</span>
                       <span className="font-medium text-blue-600">
-                        {format(new Date(calculatedDates.recommendedDate), 'dd/MM/yyyy')}
+                        {format(new Date(calculatedDates.recommendedDate), 'dd/MM/yyyy', { locale: it })}
                       </span>
                     </div>
                   )}
@@ -496,7 +554,7 @@ export default function ModificaContratto() {
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Scadenza:</span>
                       <span className="font-medium text-red-600">
-                        {format(new Date(calculatedDates.expiryDate), 'dd/MM/yyyy')}
+                        {format(new Date(calculatedDates.expiryDate), 'dd/MM/yyyy', { locale: it })}
                       </span>
                     </div>
                   )}
@@ -540,13 +598,15 @@ export default function ModificaContratto() {
                 </h3>
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
-                    {React.createElement(getTipoIcon(selectedFornitore.tipo), {
-                      className: `h-4 w-4 ${getTipoColor(selectedFornitore.tipo)}`
-                    })}
+                    {selectedFornitore.tipo && selectedFornitore.tipo.toUpperCase() === 'LUCE' ? (
+                      <Zap className={`h-4 w-4 ${getTipoColor(selectedFornitore.tipo)}`} />
+                    ) : (
+                      <Flame className={`h-4 w-4 ${getTipoColor(selectedFornitore.tipo)}`} />
+                    )}
                     <p className="font-medium">{selectedFornitore.ragioneSociale}</p>
                   </div>
                   <p className="text-sm text-gray-600">
-                    {selectedFornitore.tipo === 'luce' ? 'Energia Elettrica' : 'Gas'}
+                    {selectedFornitore.tipo && selectedFornitore.tipo.toUpperCase() === 'LUCE' ? 'Energia Elettrica' : 'Gas'}
                   </p>
                   <Link
                     href={`/fornitori/${selectedFornitore.id}`}

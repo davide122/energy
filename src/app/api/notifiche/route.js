@@ -23,7 +23,7 @@ export async function GET() {
         }
       },
       orderBy: {
-        dataCreazione: 'desc'
+        createdAt: 'desc'
       }
     })
 
@@ -45,11 +45,11 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
     }
 
-    const { tipo, messaggio, contrattoId } = await request.json()
+    const { tipo, contrattoId, scheduledDate, channel } = await request.json()
 
-    if (!tipo || !messaggio) {
+    if (!tipo || !contrattoId) {
       return NextResponse.json(
-        { error: 'Tipo e messaggio sono obbligatori' },
+        { error: 'Tipo e contrattoId sono obbligatori' },
         { status: 400 }
       )
     }
@@ -57,9 +57,9 @@ export async function POST(request) {
     const notifica = await prisma.notifica.create({
       data: {
         tipo,
-        messaggio,
         contrattoId,
-        letta: false
+        scheduledDate: scheduledDate ? new Date(scheduledDate) : new Date(),
+        channel: channel || 'EMAIL'
       },
       include: {
         contratto: {

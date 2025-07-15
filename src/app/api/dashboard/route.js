@@ -21,7 +21,7 @@ export async function GET(request) {
     const endMonth = endOfMonth(today)
 
     // Scadenze odierne per tipo
-    const [penaltyFreeToday, recommendedToday, expiryToday] = await Promise.all([
+    const [penaltyFreeRaw, recommendedRaw, expiryRaw] = await Promise.all([
       prisma.contratto.findMany({
         where: {
           penaltyFreeDate: {
@@ -59,31 +59,74 @@ export async function GET(request) {
         }
       })
     ])
+    
+    // Filtra i contratti con date valide e aggiungi flag di validità
+    const penaltyFreeToday = penaltyFreeRaw.map(contratto => {
+      const penaltyFreeDate = new Date(contratto.penaltyFreeDate)
+      const isPenaltyFreeValid = !isNaN(penaltyFreeDate.getTime())
+      return { ...contratto, isPenaltyFreeValid }
+    }).filter(c => c.isPenaltyFreeValid)
+    
+    const recommendedToday = recommendedRaw.map(contratto => {
+      const recommendedDate = new Date(contratto.recommendedDate)
+      const isRecommendedValid = !isNaN(recommendedDate.getTime())
+      return { ...contratto, isRecommendedValid }
+    }).filter(c => c.isRecommendedValid)
+    
+    const expiryToday = expiryRaw.map(contratto => {
+      const expiryDate = new Date(contratto.expiryDate)
+      const isExpiryValid = !isNaN(expiryDate.getTime())
+      return { ...contratto, isExpiryValid }
+    }).filter(c => c.isExpiryValid)
 
     // Statistiche generali
-    const [totalClienti, totalFornitori, totalContratti, contrattiAttivi] = await Promise.all([
+    const [totalClienti, totalFornitori, totalContratti, contrattiAttiviRaw] = await Promise.all([
       prisma.cliente.count(),
       prisma.fornitore.count(),
       prisma.contratto.count(),
-      prisma.contratto.count({
+      prisma.contratto.findMany({
         where: {
           expiryDate: {
             gt: today
           }
+        },
+        select: {
+          id: true,
+          expiryDate: true
         }
       })
     ])
+    
+    // Filtra i contratti attivi con date di scadenza valide
+    const contrattiAttivi = contrattiAttiviRaw.filter(contratto => {
+      const expiryDate = new Date(contratto.expiryDate)
+      return !isNaN(expiryDate.getTime())
+    }).length
 
-    // Contratti in scadenza (prossimi 30 giorni)
+    // Contratti in scadenza (prossimi 30 giorni) e scaduti (ultimi 30 giorni)
     const next30Days = new Date(today)
     next30Days.setDate(today.getDate() + 30)
+    const past30Days = new Date(today)
+    past30Days.setDate(today.getDate() - 30)
     
     const contrattiInScadenza = await prisma.contratto.findMany({
       where: {
-        expiryDate: {
-          gt: today,
-          lte: next30Days
-        }
+        OR: [
+          // Contratti in scadenza nei prossimi 30 giorni
+          {
+            expiryDate: {
+              gt: today,
+              lte: next30Days
+            }
+          },
+          // Contratti scaduti negli ultimi 30 giorni
+          {
+            expiryDate: {
+              gte: past30Days,
+              lt: today
+            }
+          }
+        ]
       },
       include: {
         cliente: true,
@@ -93,9 +136,51 @@ export async function GET(request) {
         expiryDate: 'asc'
       }
     })
+    
+    // Aggiungi informazioni di status per ogni contratto
+    const contrattiWithStatus = contrattiInScadenza.map(contratto => {
+      const now = new Date()
+      const expiryDate = new Date(contratto.expiryDate)
+      const penaltyFreeDate = new Date(contratto.penaltyFreeDate)
+      const recommendedDate = new Date(contratto.recommendedDate)
+      
+      // Verifica che le date siano valide
+      const isExpiryValid = !isNaN(expiryDate.getTime())
+      const isPenaltyFreeValid = !isNaN(penaltyFreeDate.getTime())
+      const isRecommendedValid = !isNaN(recommendedDate.getTime())
+      
+      let status = 'attivo'
+      let daysToExpiry = 0
+      
+      if (isExpiryValid) {
+        daysToExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24))
+        
+        if (expiryDate <= now) {
+          status = 'scaduto'
+        } else if (daysToExpiry <= 30) {
+          status = 'in_scadenza'
+        }
+      } else {
+        status = 'errore_data'
+      }
+      
+      const isPenaltyFree = isPenaltyFreeValid && now >= penaltyFreeDate
+      const isRecommendedChange = isRecommendedValid && now >= recommendedDate
+      
+      return {
+        ...contratto,
+        status,
+        daysToExpiry,
+        isPenaltyFree,
+        isRecommendedChange,
+        isExpiryValid,
+        isPenaltyFreeValid,
+        isRecommendedValid
+      }
+    })
 
     // Notifiche recenti (ultime 10)
-    const notificheRecenti = await prisma.notifica.findMany({
+    const notificheRecentiRaw = await prisma.notifica.findMany({
       take: 10,
       orderBy: {
         createdAt: 'desc'
@@ -107,6 +192,41 @@ export async function GET(request) {
             fornitore: true
           }
         }
+      }
+    })
+    
+    // Aggiungi validazione delle date per le notifiche
+    const notificheRecenti = notificheRecentiRaw.map(notifica => {
+      // Verifica che createdAt sia una data valida
+      const createdAt = new Date(notifica.createdAt)
+      const isCreatedAtValid = !isNaN(createdAt.getTime())
+      
+      // Verifica che scheduledDate sia una data valida se presente
+      let isScheduledDateValid = true
+      if (notifica.scheduledDate) {
+        const scheduledDate = new Date(notifica.scheduledDate)
+        isScheduledDateValid = !isNaN(scheduledDate.getTime())
+      }
+      
+      // Verifica che le date del contratto associato siano valide (se presente)
+      let contractDateValidation = {}
+      if (notifica.contratto) {
+        const expiryDate = new Date(notifica.contratto.expiryDate)
+        const penaltyFreeDate = new Date(notifica.contratto.penaltyFreeDate)
+        const recommendedDate = new Date(notifica.contratto.recommendedDate)
+        
+        contractDateValidation = {
+          isExpiryValid: !isNaN(expiryDate.getTime()),
+          isPenaltyFreeValid: !isNaN(penaltyFreeDate.getTime()),
+          isRecommendedValid: !isNaN(recommendedDate.getTime())
+        }
+      }
+      
+      return {
+        ...notifica,
+        isCreatedAtValid,
+        isScheduledDateValid,
+        ...contractDateValidation
       }
     })
 
@@ -124,24 +244,43 @@ export async function GET(request) {
       const monthStart = startOfMonth(subMonths(today, i))
       const monthEnd = endOfMonth(subMonths(today, i))
       
-      const [nuoviContratti, scadutiContratti] = await Promise.all([
-        prisma.contratto.count({
+      const [nuoviContrattiRaw, scadutiContrattiRaw] = await Promise.all([
+        prisma.contratto.findMany({
           where: {
             startDate: {
               gte: monthStart,
               lte: monthEnd
             }
+          },
+          select: {
+            id: true,
+            startDate: true
           }
         }),
-        prisma.contratto.count({
+        prisma.contratto.findMany({
           where: {
             expiryDate: {
               gte: monthStart,
               lte: monthEnd
             }
+          },
+          select: {
+            id: true,
+            expiryDate: true
           }
         })
       ])
+      
+      // Filtra i contratti con date valide
+      const nuoviContratti = nuoviContrattiRaw.filter(contratto => {
+        const startDate = new Date(contratto.startDate)
+        return !isNaN(startDate.getTime())
+      }).length
+      
+      const scadutiContratti = scadutiContrattiRaw.filter(contratto => {
+        const expiryDate = new Date(contratto.expiryDate)
+        return !isNaN(expiryDate.getTime())
+      }).length
       
       chartData.push({
         mese: format(monthStart, 'MMM yyyy', { locale: it }),
@@ -182,7 +321,7 @@ export async function GET(request) {
     })
 
     // Task/Azioni da fare (notifiche dashboard pending)
-    const taskDaFare = await prisma.notifica.findMany({
+    const taskDaFareRaw = await prisma.notifica.findMany({
       where: {
         channel: 'DASHBOARD',
         status: 'PENDING'
@@ -200,7 +339,48 @@ export async function GET(request) {
       },
       take: 10
     })
+    
+    // Aggiungi validazione delle date per i task
+    const taskDaFare = taskDaFareRaw.map(task => {
+      // Verifica che createdAt sia una data valida
+      const createdAt = new Date(task.createdAt)
+      const isCreatedAtValid = !isNaN(createdAt.getTime())
+      
+      // Verifica che scheduledDate sia una data valida se presente
+      let isScheduledDateValid = true
+      if (task.scheduledDate) {
+        const scheduledDate = new Date(task.scheduledDate)
+        isScheduledDateValid = !isNaN(scheduledDate.getTime())
+      }
+      
+      // Verifica che le date del contratto associato siano valide (se presente)
+      let contractDateValidation = {}
+      if (task.contratto) {
+        const expiryDate = new Date(task.contratto.expiryDate)
+        const penaltyFreeDate = new Date(task.contratto.penaltyFreeDate)
+        const recommendedDate = new Date(task.contratto.recommendedDate)
+        
+        contractDateValidation = {
+          isExpiryValid: !isNaN(expiryDate.getTime()),
+          isPenaltyFreeValid: !isNaN(penaltyFreeDate.getTime()),
+          isRecommendedValid: !isNaN(recommendedDate.getTime())
+        }
+      }
+      
+      return {
+        ...task,
+        isCreatedAtValid,
+        isScheduledDateValid,
+        ...contractDateValidation
+      }
+    })
 
+    // Calcola statistiche dettagliate sui contratti
+    const contrattiPenaltyFree = contrattiWithStatus.filter(c => c.isPenaltyFree).length;
+    const contrattiRecommended = contrattiWithStatus.filter(c => c.isRecommendedChange).length;
+    const contrattiScaduti = contrattiWithStatus.filter(c => c.status === 'scaduto').length;
+    const contrattiInScadenzaProssima = contrattiWithStatus.filter(c => c.status === 'in_scadenza').length;
+    
     const dashboard = {
       scadenzeOdierne: {
         penaltyFree: penaltyFreeToday,
@@ -213,9 +393,13 @@ export async function GET(request) {
         fornitori: totalFornitori,
         contratti: totalContratti,
         contrattiAttivi,
-        contrattiInScadenza: contrattiInScadenza.length
+        contrattiInScadenza: contrattiWithStatus.length,
+        contrattiPenaltyFree,
+        contrattiRecommended,
+        contrattiScaduti,
+        contrattiInScadenzaProssima
       },
-      contrattiInScadenza,
+      contrattiInScadenza: contrattiWithStatus,
       notificheRecenti,
       taskDaFare,
       grafici: {

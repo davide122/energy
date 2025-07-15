@@ -4,9 +4,6 @@ import { Providers } from '../components/Providers'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-
 export const metadata = {
   title: 'CRM Gestione Energie',
   description: 'Sistema di gestione contratti luce e gas',
@@ -15,6 +12,8 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="it">
+      <head>
+      </head>
       <body className={inter.className}>
         <Providers>
           {children}

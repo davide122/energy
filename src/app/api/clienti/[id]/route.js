@@ -64,23 +64,39 @@ export async function GET(request, { params }) {
       )
     }
 
-    // Aggiungi informazioni sui contratti attivi
+    // Aggiungi informazioni sui contratti attivi con gestione sicura delle date
     const contrattiAttivi = cliente.contratti.filter(c => {
-      const today = new Date()
-      return c.expiryDate && new Date(c.expiryDate) > today
+      try {
+        const today = new Date()
+        if (!c.expiryDate) return false
+        const expiryDate = new Date(c.expiryDate)
+        return !isNaN(expiryDate.getTime()) && expiryDate > today
+      } catch (error) {
+        console.error('Errore nella validazione data contratto:', error)
+        return false
+      }
     })
 
     const prossimaScadenza = contrattiAttivi.reduce((earliest, contract) => {
-      if (!earliest || new Date(contract.expiryDate) < new Date(earliest.expiryDate)) {
-        return contract
+      try {
+        if (!earliest) return contract
+        const contractDate = new Date(contract.expiryDate)
+        const earliestDate = new Date(earliest.expiryDate)
+        if (isNaN(contractDate.getTime()) || isNaN(earliestDate.getTime())) {
+          return earliest
+        }
+        return contractDate < earliestDate ? contract : earliest
+      } catch (error) {
+        console.error('Errore nel calcolo prossima scadenza:', error)
+        return earliest
       }
-      return earliest
     }, null)
 
     return NextResponse.json({
       ...cliente,
+      contrattiTotali: cliente.contratti.length,
       contrattiAttivi: contrattiAttivi.length,
-      prossimaScadenza
+      prossimaScadenza: prossimaScadenza ? prossimaScadenza.expiryDate : null
     })
 
   } catch (error) {

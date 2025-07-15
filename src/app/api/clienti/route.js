@@ -50,9 +50,13 @@ export async function GET(request) {
         }
       }
     }
+    
+    // Parametro per includere tutti i clienti, anche quelli senza contratto
+    const includeAll = searchParams.get('includeAll') === 'true';
+    // Se includeAll è true, non applichiamo filtri sui contratti
 
     // Filtro per scadenza
-    if (scadenza) {
+    if (scadenza && !includeAll) {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       
@@ -107,8 +111,28 @@ export async function GET(request) {
       prisma.cliente.count({ where })
     ])
 
+    // Aggiungi contratto attivo per ogni cliente
+    const clientiWithActiveContract = clienti.map(cliente => {
+      const contrattoAttivo = cliente.contratti.find(c => {
+        try {
+          const today = new Date()
+          if (!c.expiryDate) return false
+          const expiryDate = new Date(c.expiryDate)
+          return !isNaN(expiryDate.getTime()) && expiryDate > today
+        } catch (error) {
+          console.error('Errore nella validazione data contratto:', error)
+          return false
+        }
+      })
+      
+      return {
+        ...cliente,
+        contrattoAttivo
+      }
+    })
+
     return NextResponse.json({
-      clienti,
+      clienti: clientiWithActiveContract,
       pagination: {
         page,
         limit,

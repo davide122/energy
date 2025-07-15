@@ -281,13 +281,13 @@ export default function NotifichePage() {
                           </p>
                         )}
                         <p>
-                          <strong>Data:</strong> {new Date(notifica.dataCreazione).toLocaleDateString('it-IT', {
+                          <strong>Data:</strong> {/* {new Date(notifica.dataCreazione).toLocaleDateString('it-IT', {
                             year: 'numeric',
                             month: 'long',
                             day: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit'
-                          })}
+                          })} */} DEBUG: Data commentata
                         </p>
                       </div>
                     </div>

@@ -70,7 +70,7 @@ export default function ModificaFornitore() {
       
       const fornitoreData = {
         ragioneSociale: data.ragioneSociale || '',
-        tipo: data.tipo || 'luce',
+        tipo: (data.tipo || 'LUCE').toLowerCase(),
         note: data.note || ''
       }
       
@@ -126,12 +126,18 @@ export default function ModificaFornitore() {
       setSaving(true)
       setError(null)
       
+      // Converte il tipo in maiuscolo prima dell'invio
+      const dataToSend = {
+        ...formData,
+        tipo: formData.tipo.toUpperCase()
+      }
+      
       const response = await fetch(`/api/fornitori/${fornitoreId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(dataToSend)
       })
       
       if (!response.ok) {

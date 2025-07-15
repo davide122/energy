@@ -4,24 +4,35 @@ const globalForPrisma = globalThis
 
 export const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query'],
-  })
+  new PrismaClient()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 // Utility functions per calcoli date
 export const calculateContractDates = (startDate, durataMesi, penaltyFreeAfterMesi = 6) => {
-  const start = new Date(startDate)
+  // Assicuriamoci che startDate sia una data valida
+  const start = startDate ? new Date(startDate) : new Date()
   
+  // Verifichiamo che la data sia valida
+  if (isNaN(start.getTime())) {
+    throw new Error('Data di inizio non valida')
+  }
+  
+  // Convertiamo i valori a numeri interi per evitare problemi
+  const mesiDurata = parseInt(durataMesi) || 12
+  const mesiPenaltyFree = parseInt(penaltyFreeAfterMesi) || 6
+  
+  // Creiamo nuove istanze di Date per evitare riferimenti condivisi
   const penaltyFreeDate = new Date(start)
-  penaltyFreeDate.setMonth(start.getMonth() + penaltyFreeAfterMesi)
+  penaltyFreeDate.setMonth(start.getMonth() + mesiPenaltyFree)
   
   const recommendedDate = new Date(start)
-  recommendedDate.setMonth(start.getMonth() + 10)
+  // Il cambio consigliato è 2 mesi prima della scadenza o dopo il penalty free, il più recente dei due
+  const mesiRecommended = Math.max(mesiPenaltyFree, mesiDurata - 2)
+  recommendedDate.setMonth(start.getMonth() + mesiRecommended)
   
   const expiryDate = new Date(start)
-  expiryDate.setMonth(start.getMonth() + durataMesi)
+  expiryDate.setMonth(start.getMonth() + mesiDurata)
   
   return {
     penaltyFreeDate,
@@ -32,21 +43,23 @@ export const calculateContractDates = (startDate, durataMesi, penaltyFreeAfterMe
 
 // Funzione per verificare se un fornitore è già stato usato
 export const checkFornitoreHistory = async (clienteId, fornitoreId) => {
-  const lastContract = await prisma.storicoContratto.findFirst({
+  // Trova l'ultimo contratto del cliente
+  const lastContract = await prisma.contratto.findFirst({
     where: {
-      contratto: {
-        clienteId: clienteId
-      }
+      clienteId: clienteId
     },
     orderBy: {
-      endDate: 'desc'
+      startDate: 'desc'
     },
     include: {
       fornitore: true
     }
-  })
+  });
   
-  return lastContract?.fornitoreId === fornitoreId
+  // Verifica se l'ultimo fornitore è lo stesso di quello selezionato
+  const isSameProvider = lastContract?.fornitoreId === fornitoreId;
+  
+  return isSameProvider;
 }
 
 // Funzione per ottenere contratti in scadenza

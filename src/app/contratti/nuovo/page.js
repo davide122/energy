@@ -1,519 +1,377 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { redirect, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import Layout from '../../../components/Layout'
-import {
-  ArrowLeft,
-  Save,
-  X,
-  User,
-  Building2,
-  Calendar,
-  Clock,
-  FileText,
-  AlertTriangle,
-  Zap,
-  Flame,
-  Plus
-} from 'lucide-react'
-import { format, addMonths } from 'date-fns'
+import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import Layout from "../../../components/Layout";
 
 export default function NuovoContratto() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  // Aggiungere la sidebar alla pagina di creazione contratto
+  // Questo componente dovrebbe essere importato e utilizzato nel layout della pagina
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [clienti, setClienti] = useState([]);
+  const [fornitori, setFornitori] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [clienteHasContract, setClienteHasContract] = useState(false);
+  const [lastFornitoreId, setLastFornitoreId] = useState(null);
+  const [isSameFornitore, setIsSameFornitore] = useState(false);
   
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [clienti, setClienti] = useState([])
-  const [fornitori, setFornitori] = useState([])
-  const [loadingData, setLoadingData] = useState(true)
+  const [contract, setContract] = useState({
+    clienteId: searchParams.get("clienteId") || "",
+    fornitoreId: "",
+    startDate: "",
+    durataMesi: 24,
+    penaltyFreeAfterMesi: 12,
+    note: ""
+  });
   
-  const [formData, setFormData] = useState({
-    clienteId: searchParams.get('clienteId') || '',
-    fornitoreId: searchParams.get('fornitoreId') || '',
-    startDate: format(new Date(), 'yyyy-MM-dd'),
-    durataMesi: 12,
-    penaltyFreeAfterMesi: 6
-  })
-  
-  const [validationErrors, setValidationErrors] = useState({})
-  const [calculatedDates, setCalculatedDates] = useState({
-    penaltyFreeDate: '',
-    recommendedDate: '',
-    expiryDate: ''
-  })
+  const [errors, setErrors] = useState({});
 
+  // Redirect se non autenticato
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      redirect('/auth/signin')
+    if (status === "unauthenticated") {
+      router.push("/auth/signin");
     }
-  }, [status])
+  }, [status, router]);
 
+  // Carica dati
   useEffect(() => {
-    if (session) {
-      fetchData()
+    async function fetchData() {
+      try {
+        const [clientiResponse, fornitoriResponse] = await Promise.all([
+          fetch("/api/clienti?limit=1000&includeAll=true"),
+          fetch("/api/fornitori?limit=1000")
+        ]);
+        
+        if (clientiResponse.ok && fornitoriResponse.ok) {
+          const clientiData = await clientiResponse.json();
+          const fornitoriData = await fornitoriResponse.json();
+          setClienti(clientiData.clienti || []);
+          setFornitori(fornitoriData.fornitori || []);
+        }
+      } catch (err) {
+        setError("Errore nel caricamento dati");
+      } finally {
+        setDataLoading(false);
+      }
     }
-  }, [session])
+    
+    if (status === "authenticated") {
+      fetchData();
+    }
+  }, [status]);
 
+  // Verifica se il cliente ha già un contratto quando viene selezionato
   useEffect(() => {
-    calculateDates()
-  }, [formData.startDate, formData.durataMesi, formData.penaltyFreeAfterMesi])
-
-  const fetchData = async () => {
-    try {
-      setLoadingData(true)
-      
-      // Fetch clienti
-      const clientiResponse = await fetch('/api/clienti?limit=1000')
-      if (clientiResponse.ok) {
-        const clientiData = await clientiResponse.json()
-        setClienti(clientiData.clienti || [])
+    async function checkClienteContratti() {
+      if (!contract.clienteId) {
+        setClienteHasContract(false);
+        setLastFornitoreId(null);
+        setIsSameFornitore(false);
+        return;
       }
       
-      // Fetch fornitori
-      const fornitoriResponse = await fetch('/api/fornitori?limit=1000')
-      if (fornitoriResponse.ok) {
-        const fornitoriData = await fornitoriResponse.json()
-        setFornitori(fornitoriData.fornitori || [])
+      try {
+        // Utilizziamo l'endpoint dei contratti con filtro per clienteId
+        const response = await fetch(`/api/contratti?clienteId=${contract.clienteId}&limit=1&sortBy=startDate&sortOrder=desc`);
+        if (response.ok) {
+          const data = await response.json();
+          const hasContracts = data.contratti && data.contratti.length > 0;
+          setClienteHasContract(hasContracts);
+          
+          // Se ci sono contratti, salviamo l'ID dell'ultimo fornitore
+          if (hasContracts) {
+            const lastContract = data.contratti[0];
+            // Salviamo l'ID dell'ultimo fornitore senza log
+            setLastFornitoreId(lastContract.fornitoreId);
+            
+            // Se c'è già un fornitore selezionato, verifichiamo se è lo stesso
+            if (contract.fornitoreId) {
+              const isSame = lastContract.fornitoreId === contract.fornitoreId;
+              setIsSameFornitore(isSame);
+              if (isSame) {
+                setErrors(prev => ({
+                  ...prev,
+                  fornitoreId: 'Non è possibile utilizzare lo stesso fornitore consecutivamente'
+                }));
+              }
+            }
+          } else {
+            setLastFornitoreId(null);
+            setIsSameFornitore(false);
+          }
+          
+          // Resettiamo lo stato di isSameFornitore quando cambia il cliente
+          setIsSameFornitore(false);
+        }
+      } catch (err) {
+        setError("Errore nel verificare i contratti del cliente");
       }
-    } catch (error) {
-      console.error('Errore nel caricamento dei dati:', error)
-    } finally {
-      setLoadingData(false)
     }
-  }
+    
+    if (contract.clienteId) {
+      checkClienteContratti();
+    }
+  }, [contract.clienteId]);
 
-  const calculateDates = () => {
-    if (!formData.startDate) return
+  const handleChange = (field, value) => {
+    setContract(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: null }));
+    }
     
-    const startDate = new Date(formData.startDate)
-    const penaltyFreeDate = addMonths(startDate, formData.penaltyFreeAfterMesi)
-    const recommendedDate = addMonths(startDate, 10) // Fisso a 10 mesi
-    const expiryDate = addMonths(startDate, formData.durataMesi)
-    
-    setCalculatedDates({
-      penaltyFreeDate: format(penaltyFreeDate, 'yyyy-MM-dd'),
-      recommendedDate: format(recommendedDate, 'yyyy-MM-dd'),
-      expiryDate: format(expiryDate, 'yyyy-MM-dd')
-    })
-  }
+    // Verifica se il fornitore selezionato è lo stesso dell'ultimo contratto
+    if (field === "fornitoreId") {
+      setError(null);
+      if (lastFornitoreId && value === lastFornitoreId) {
+        setIsSameFornitore(true);
+        setErrors(prev => ({
+          ...prev,
+          fornitoreId: 'Non è possibile utilizzare lo stesso fornitore consecutivamente'
+        }));
+      } else {
+        setIsSameFornitore(false);
+        // Rimuovi l'errore se era stato impostato
+        if (errors.fornitoreId === 'Non è possibile utilizzare lo stesso fornitore consecutivamente') {
+          setErrors(prev => ({
+            ...prev,
+            fornitoreId: ''
+          }));
+        }
+      }
+    }
+  };
 
-  const validateForm = () => {
-    const errors = {}
+  const validate = () => {
+    const newErrors = {};
     
-    if (!formData.clienteId) {
-      errors.clienteId = 'Il cliente è obbligatorio'
+    if (!contract.clienteId) newErrors.clienteId = "Cliente richiesto";
+    if (!contract.fornitoreId) newErrors.fornitoreId = "Fornitore richiesto";
+    if (!contract.startDate) newErrors.startDate = "Data di inizio richiesta";
+    if (!contract.durataMesi || contract.durataMesi < 1) newErrors.durataMesi = "Durata non valida";
+    if (!contract.penaltyFreeAfterMesi || contract.penaltyFreeAfterMesi < 1) {
+      newErrors.penaltyFreeAfterMesi = "Periodo penalty free non valido";
+    }
+    if (contract.penaltyFreeAfterMesi >= contract.durataMesi) {
+      newErrors.penaltyFreeAfterMesi = "Deve essere inferiore alla durata totale";
     }
     
-    if (!formData.fornitoreId) {
-      errors.fornitoreId = 'Il fornitore è obbligatorio'
+    // Verifica se il fornitore selezionato è lo stesso dell'ultimo contratto
+    if (lastFornitoreId && contract.fornitoreId === lastFornitoreId) {
+      newErrors.fornitoreId = "Non è possibile utilizzare lo stesso fornitore consecutivamente";
+      setIsSameFornitore(true);
     }
     
-    if (!formData.startDate) {
-      errors.startDate = 'La data di inizio è obbligatoria'
-    }
-    
-    if (!formData.durataMesi || formData.durataMesi < 1) {
-      errors.durataMesi = 'La durata deve essere almeno 1 mese'
-    }
-    
-    if (!formData.penaltyFreeAfterMesi || formData.penaltyFreeAfterMesi < 1) {
-      errors.penaltyFreeAfterMesi = 'Il periodo penalty free deve essere almeno 1 mese'
-    }
-    
-    if (formData.penaltyFreeAfterMesi >= formData.durataMesi) {
-      errors.penaltyFreeAfterMesi = 'Il periodo penalty free deve essere inferiore alla durata del contratto'
-    }
-    
-    setValidationErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'durataMesi' || name === 'penaltyFreeAfterMesi' ? parseInt(value) || 0 : value
-    }))
-    
-    // Rimuovi l'errore di validazione per questo campo
-    if (validationErrors[name]) {
-      setValidationErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors[name]
-        return newErrors
-      })
-    }
-  }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
     
-    if (!validateForm()) {
-      return
+    // Verifica esplicita se il fornitore selezionato è lo stesso dell'ultimo contratto
+    if (lastFornitoreId && contract.fornitoreId === lastFornitoreId) {
+      setIsSameFornitore(true);
+      setErrors(prev => ({
+        ...prev,
+        fornitoreId: 'Non è possibile utilizzare lo stesso fornitore consecutivamente'
+      }));
+      return;
     }
+    
+    if (!validate()) return;
+    
+    setLoading(true);
+    setError(null);
     
     try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await fetch('/api/contratti', {
-        method: 'POST',
+      const response = await fetch("/api/contratti", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify(formData)
-      })
+        body: JSON.stringify(contract)
+      });
       
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Errore nella creazione del contratto')
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Errore nella creazione del contratto");
       }
       
-      const contratto = await response.json()
-      router.push(`/contratti/${contratto.id}`)
-    } catch (error) {
-      setError(error.message)
+      const newContract = await response.json();
+      router.push(`/contratti/${newContract.id}`);
+    } catch (err) {
+      setError(err.message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const getTipoIcon = (tipo) => {
-    return tipo === 'luce' ? Zap : Flame
-  }
-
-  const getTipoColor = (tipo) => {
-    return tipo === 'luce' ? 'text-yellow-600' : 'text-blue-600'
-  }
-
-  const selectedCliente = clienti.find(c => c.id === formData.clienteId)
-  const selectedFornitore = fornitori.find(f => f.id === formData.fornitoreId)
-
-  if (status === 'loading' || loadingData) {
+  // Loading state
+  if (status === "loading") {
     return (
-      <Layout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      </Layout>
-    )
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Non autenticato
+  if (status === "unauthenticated") {
+    return null;
   }
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-4">
-            <Link href="/contratti" className="text-gray-600 hover:text-gray-800">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Nuovo Contratto</h1>
-              <p className="text-gray-600">Crea un nuovo contratto per un cliente</p>
-            </div>
-          </div>
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        <div className="mb-8">
+          <Link href="/contratti" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
+            ← Torna ai contratti
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-900">Nuovo Contratto</h1>
+          <p className="mt-2 text-gray-600">Crea un nuovo contratto energetico</p>
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Form principale */}
-          <div className="lg:col-span-2">
-            <div className="card">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                    {error}
-                  </div>
-                )}
-
-                {/* Selezione Cliente */}
+        
+        <div className="bg-white rounded-lg shadow p-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {error}
+              </div>
+            )}
+            
+            {dataLoading ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <>
                 <div>
-                  <label htmlFor="clienteId" className="label">
-                    Cliente *
-                  </label>
-                  <div className="flex space-x-2">
-                    <select
-                      id="clienteId"
-                      name="clienteId"
-                      value={formData.clienteId}
-                      onChange={handleInputChange}
-                      className={`input flex-1 ${validationErrors.clienteId ? 'border-red-500' : ''}`}
-                      required
-                    >
-                      <option value="">Seleziona un cliente</option>
-                      {clienti.map(cliente => (
-                        <option key={cliente.id} value={cliente.id}>
-                          {cliente.nome} {cliente.cognome} - {cliente.email}
-                        </option>
-                      ))}
-                    </select>
-                    <Link
-                      href="/clienti/nuovo"
-                      className="btn-secondary flex items-center space-x-1 whitespace-nowrap"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Nuovo</span>
-                    </Link>
-                  </div>
-                  {validationErrors.clienteId && (
-                    <p className="text-red-500 text-sm mt-1">{validationErrors.clienteId}</p>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Cliente *</label>
+                  <select
+                    value={contract.clienteId}
+                    onChange={(e) => handleChange("clienteId", e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.clienteId ? "border-red-500" : "border-gray-300"}`}
+                  >
+                    <option value="">Seleziona cliente</option>
+                    {clienti.map(cliente => (
+                      <option key={cliente.id} value={cliente.id}>
+                        {`${cliente.nome} ${cliente.cognome} - ${cliente.email}`}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.clienteId && (
+                    <p className="mt-1 text-sm text-red-600">{errors.clienteId}</p>
+                  )}
+                  {clienteHasContract && (
+                    <p className="mt-1 text-sm text-amber-600">Nota: Questo cliente ha già un contratto attivo.</p>
                   )}
                 </div>
-
-                {/* Selezione Fornitore */}
+                
                 <div>
-                  <label htmlFor="fornitoreId" className="label">
-                    Fornitore *
-                  </label>
-                  <div className="flex space-x-2">
-                    <select
-                      id="fornitoreId"
-                      name="fornitoreId"
-                      value={formData.fornitoreId}
-                      onChange={handleInputChange}
-                      className={`input flex-1 ${validationErrors.fornitoreId ? 'border-red-500' : ''}`}
-                      required
-                    >
-                      <option value="">Seleziona un fornitore</option>
-                      {fornitori.map(fornitore => {
-                        const TipoIcon = getTipoIcon(fornitore.tipo)
-                        return (
-                          <option key={fornitore.id} value={fornitore.id}>
-                            {fornitore.ragioneSociale} ({fornitore.tipo})
-                          </option>
-                        )
-                      })}
-                    </select>
-                    <Link
-                      href="/fornitori/nuovo"
-                      className="btn-secondary flex items-center space-x-1 whitespace-nowrap"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Nuovo</span>
-                    </Link>
-                  </div>
-                  {validationErrors.fornitoreId && (
-                    <p className="text-red-500 text-sm mt-1">{validationErrors.fornitoreId}</p>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Fornitore *</label>
+                  <select
+                    value={contract.fornitoreId}
+                    onChange={(e) => handleChange("fornitoreId", e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.fornitoreId || isSameFornitore ? "border-red-500" : "border-gray-300"}`}
+                  >
+                    <option value="">Seleziona fornitore</option>
+                    {fornitori.map(fornitore => (
+                      <option 
+                        key={fornitore.id} 
+                        value={fornitore.id}
+                        disabled={lastFornitoreId === fornitore.id}
+                      >
+                        {fornitore.ragioneSociale} {lastFornitoreId === fornitore.id ? "(ultimo utilizzato)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.fornitoreId && (
+                    <p className="mt-1 text-sm text-red-600">{errors.fornitoreId}</p>
+                  )}
+                  {isSameFornitore && (
+                    <p className="mt-1 text-sm text-red-600 font-bold">Non è possibile utilizzare lo stesso fornitore consecutivamente</p>
                   )}
                 </div>
-
-                {/* Data di inizio */}
+                
                 <div>
-                  <label htmlFor="startDate" className="label">
-                    Data di Inizio *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Data di inizio *</label>
                   <input
                     type="date"
-                    id="startDate"
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleInputChange}
-                    className={`input ${validationErrors.startDate ? 'border-red-500' : ''}`}
-                    required
+                    value={contract.startDate}
+                    onChange={(e) => handleChange("startDate", e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startDate ? "border-red-500" : "border-gray-300"}`}
                   />
-                  {validationErrors.startDate && (
-                    <p className="text-red-500 text-sm mt-1">{validationErrors.startDate}</p>
+                  {errors.startDate && (
+                    <p className="mt-1 text-sm text-red-600">{errors.startDate}</p>
                   )}
                 </div>
-
-                {/* Durata e Penalty Free */}
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="durataMesi" className="label">
-                      Durata Contratto (mesi) *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Durata (mesi) *</label>
                     <input
                       type="number"
-                      id="durataMesi"
-                      name="durataMesi"
-                      value={formData.durataMesi}
-                      onChange={handleInputChange}
                       min="1"
-                      max="60"
-                      className={`input ${validationErrors.durataMesi ? 'border-red-500' : ''}`}
-                      required
+                      value={contract.durataMesi}
+                      onChange={(e) => handleChange("durataMesi", parseInt(e.target.value) || "")}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.durataMesi ? "border-red-500" : "border-gray-300"}`}
                     />
-                    {validationErrors.durataMesi && (
-                      <p className="text-red-500 text-sm mt-1">{validationErrors.durataMesi}</p>
+                    {errors.durataMesi && (
+                      <p className="mt-1 text-sm text-red-600">{errors.durataMesi}</p>
                     )}
                   </div>
                   
                   <div>
-                    <label htmlFor="penaltyFreeAfterMesi" className="label">
-                      Penalty Free Dopo (mesi) *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Penalty Free dopo (mesi) *</label>
                     <input
                       type="number"
-                      id="penaltyFreeAfterMesi"
-                      name="penaltyFreeAfterMesi"
-                      value={formData.penaltyFreeAfterMesi}
-                      onChange={handleInputChange}
                       min="1"
-                      max={formData.durataMesi - 1}
-                      className={`input ${validationErrors.penaltyFreeAfterMesi ? 'border-red-500' : ''}`}
-                      required
+                      value={contract.penaltyFreeAfterMesi}
+                      onChange={(e) => handleChange("penaltyFreeAfterMesi", parseInt(e.target.value) || "")}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.penaltyFreeAfterMesi ? "border-red-500" : "border-gray-300"}`}
                     />
-                    {validationErrors.penaltyFreeAfterMesi && (
-                      <p className="text-red-500 text-sm mt-1">{validationErrors.penaltyFreeAfterMesi}</p>
+                    {errors.penaltyFreeAfterMesi && (
+                      <p className="mt-1 text-sm text-red-600">{errors.penaltyFreeAfterMesi}</p>
                     )}
                   </div>
                 </div>
-
-                {/* Azioni */}
-                <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-                  <Link href="/contratti" className="btn-secondary flex items-center space-x-2">
-                    <X className="h-4 w-4" />
-                    <span>Annulla</span>
-                  </Link>
-                  
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="btn-primary flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>Creazione...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        <span>Crea Contratto</span>
-                      </>
-                    )}
-                  </button>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Note</label>
+                  <textarea
+                    value={contract.note}
+                    onChange={(e) => handleChange("note", e.target.value)}
+                    rows="4"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  ></textarea>
                 </div>
-              </form>
-            </div>
-          </div>
-
-          {/* Sidebar con anteprima */}
-          <div className="space-y-6">
-            {/* Anteprima date calcolate */}
-            <div className="card">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <Calendar className="h-5 w-5 mr-2" />
-                Date Calcolate
-              </h3>
-              
-              {formData.startDate ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Inizio:</span>
-                    <span className="font-medium">
-                      {format(new Date(formData.startDate), 'dd/MM/yyyy')}
-                    </span>
-                  </div>
-                  
-                  {calculatedDates.penaltyFreeDate && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Penalty Free:</span>
-                      <span className="font-medium text-green-600">
-                        {format(new Date(calculatedDates.penaltyFreeDate), 'dd/MM/yyyy')}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {calculatedDates.recommendedDate && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Cambio Consigliato:</span>
-                      <span className="font-medium text-blue-600">
-                        {format(new Date(calculatedDates.recommendedDate), 'dd/MM/yyyy')}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {calculatedDates.expiryDate && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Scadenza:</span>
-                      <span className="font-medium text-red-600">
-                        {format(new Date(calculatedDates.expiryDate), 'dd/MM/yyyy')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm">Inserisci una data di inizio per vedere le date calcolate</p>
-              )}
-            </div>
-
-            {/* Anteprima cliente selezionato */}
-            {selectedCliente && (
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <User className="h-5 w-5 mr-2" />
-                  Cliente Selezionato
-                </h3>
-                <div className="space-y-2">
-                  <p className="font-medium">
-                    {selectedCliente.nome} {selectedCliente.cognome}
-                  </p>
-                  <p className="text-sm text-gray-600">{selectedCliente.email}</p>
-                  {selectedCliente.telefono && (
-                    <p className="text-sm text-gray-600">{selectedCliente.telefono}</p>
-                  )}
-                  <Link
-                    href={`/clienti/${selectedCliente.id}`}
-                    className="text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    Visualizza profilo →
-                  </Link>
-                </div>
-              </div>
+              </>
             )}
-
-            {/* Anteprima fornitore selezionato */}
-            {selectedFornitore && (
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <Building2 className="h-5 w-5 mr-2" />
-                  Fornitore Selezionato
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    {React.createElement(getTipoIcon(selectedFornitore.tipo), {
-                      className: `h-4 w-4 ${getTipoColor(selectedFornitore.tipo)}`
-                    })}
-                    <p className="font-medium">{selectedFornitore.ragioneSociale}</p>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    {selectedFornitore.tipo === 'luce' ? 'Energia Elettrica' : 'Gas'}
-                  </p>
-                  <Link
-                    href={`/fornitori/${selectedFornitore.id}`}
-                    className="text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    Visualizza profilo →
-                  </Link>
-                </div>
-              </div>
-            )}
-
-            {/* Informazioni importanti */}
-            <div className="card">
-              <div className="flex items-start space-x-3">
-                <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
-                <div className="text-sm text-gray-700">
-                  <p className="font-medium mb-2">Informazioni importanti:</p>
-                  <ul className="list-disc list-inside space-y-1 text-sm">
-                    <li>Il sistema verificherà automaticamente che non ci siano contratti attivi con lo stesso fornitore</li>
-                    <li>Le notifiche verranno programmate automaticamente</li>
-                    <li>Il cambio consigliato è sempre fissato a 10 mesi dall'inizio</li>
-                    <li>Il periodo penalty free deve essere inferiore alla durata totale</li>
-                  </ul>
-                </div>
-              </div>
+            
+            <div className="flex justify-end space-x-4 pt-6">
+              <Link
+                href="/contratti"
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Annulla
+              </Link>
+              <button
+                type="submit"
+                disabled={loading || dataLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? "Creazione..." : "Crea Contratto"}
+              </button>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     </Layout>
-  )
+  );
 }

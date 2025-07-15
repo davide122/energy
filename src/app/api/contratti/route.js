@@ -8,7 +8,13 @@ import { z } from 'zod'
 const contrattoSchema = z.object({
   clienteId: z.string().min(1, 'Cliente è obbligatorio'),
   fornitoreId: z.string().min(1, 'Fornitore è obbligatorio'),
-  startDate: z.string().datetime('Data inizio non valida'),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inizio non valida (formato YYYY-MM-DD)').transform(date => {
+    const parsedDate = new Date(date + 'T00:00:00.000Z')
+    if (isNaN(parsedDate.getTime())) {
+      throw new Error('Data inizio non valida')
+    }
+    return parsedDate.toISOString()
+  }),
   durataMesi: z.number().int().min(1, 'Durata deve essere almeno 1 mese').max(60, 'Durata massima 60 mesi'),
   penaltyFreeAfterMesi: z.number().int().min(1).max(24).default(6)
 })
@@ -132,7 +138,6 @@ export async function GET(request) {
     })
 
   } catch (error) {
-    console.error('Errore GET contratti:', error)
     return NextResponse.json(
       { error: 'Errore interno del server' },
       { status: 500 }
@@ -183,11 +188,28 @@ export async function POST(request) {
     }
 
     // Calcola le date del contratto
-    const dates = calculateContractDates(
-      validatedData.startDate,
-      validatedData.durataMesi,
-      validatedData.penaltyFreeAfterMesi
-    )
+    let dates;
+    try {
+      dates = calculateContractDates(
+        validatedData.startDate,
+        validatedData.durataMesi,
+        validatedData.penaltyFreeAfterMesi
+      )
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Errore nel calcolo delle date del contratto', details: error.message },
+        { status: 400 }
+      )
+    }
+
+    // Verifica che le date calcolate siano valide
+    if (!dates.penaltyFreeDate || !dates.recommendedDate || !dates.expiryDate ||
+        isNaN(dates.penaltyFreeDate.getTime()) || isNaN(dates.recommendedDate.getTime()) || isNaN(dates.expiryDate.getTime())) {
+      return NextResponse.json(
+        { error: 'Date del contratto non valide' },
+        { status: 400 }
+      )
+    }
 
     // Crea il contratto
     const contratto = await prisma.contratto.create({
@@ -230,9 +252,8 @@ export async function POST(request) {
       )
     }
 
-    console.error('Errore POST contratto:', error)
     return NextResponse.json(
-      { error: 'Errore interno del serverr' },
+      { error: 'Errore interno del server' },
       { status: 500 }
     )
   }

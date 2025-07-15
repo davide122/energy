@@ -124,16 +124,57 @@ export async function PUT(request, { params }) {
     
     // Se viene modificata la data di inizio o la durata, ricalcola le date
     if (validatedData.startDate || validatedData.durataMesi || validatedData.penaltyFreeAfterMesi) {
-      const startDate = validatedData.startDate ? new Date(validatedData.startDate) : existingContratto.startDate
-      const durataMesi = validatedData.durataMesi || existingContratto.durataMesi
-      const penaltyFreeAfterMesi = validatedData.penaltyFreeAfterMesi || existingContratto.penaltyFreeAfterMesi
-      
-      const dates = calculateContractDates(startDate, durataMesi, penaltyFreeAfterMesi)
-      
-      updateData.startDate = startDate
-      updateData.penaltyFreeDate = dates.penaltyFreeDate
-      updateData.recommendedDate = dates.recommendedDate
-      updateData.expiryDate = dates.expiryDate
+      try {
+        // Verifica che la data di inizio sia valida
+        const startDate = validatedData.startDate ? new Date(validatedData.startDate) : existingContratto.startDate
+        if (isNaN(startDate.getTime())) {
+          return NextResponse.json(
+            { error: 'Data di inizio non valida' },
+            { status: 400 }
+          )
+        }
+        
+        // Converti i valori a numeri interi
+        const durataMesi = parseInt(validatedData.durataMesi || existingContratto.durataMesi)
+        const penaltyFreeAfterMesi = parseInt(validatedData.penaltyFreeAfterMesi || existingContratto.penaltyFreeAfterMesi)
+        
+        if (isNaN(durataMesi) || durataMesi <= 0) {
+          return NextResponse.json(
+            { error: 'Durata mesi non valida' },
+            { status: 400 }
+          )
+        }
+        
+        if (isNaN(penaltyFreeAfterMesi) || penaltyFreeAfterMesi < 0) {
+          return NextResponse.json(
+            { error: 'Periodo penalty free non valido' },
+            { status: 400 }
+          )
+        }
+        
+        // Calcola le date del contratto
+        const dates = calculateContractDates(startDate, durataMesi, penaltyFreeAfterMesi)
+        
+        // Verifica che le date calcolate siano valide
+        if (!dates.penaltyFreeDate || !dates.recommendedDate || !dates.expiryDate ||
+            isNaN(dates.penaltyFreeDate.getTime()) || isNaN(dates.recommendedDate.getTime()) || isNaN(dates.expiryDate.getTime())) {
+          return NextResponse.json(
+            { error: 'Errore nel calcolo delle date del contratto' },
+            { status: 400 }
+          )
+        }
+        
+        updateData.startDate = startDate
+        updateData.penaltyFreeDate = dates.penaltyFreeDate
+        updateData.recommendedDate = dates.recommendedDate
+        updateData.expiryDate = dates.expiryDate
+      } catch (error) {
+        console.error('Errore nel calcolo delle date:', error)
+        return NextResponse.json(
+          { error: 'Errore nel calcolo delle date del contratto', details: error.message },
+          { status: 400 }
+        )
+      }
     }
 
     const contratto = await prisma.contratto.update({

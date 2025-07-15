@@ -19,7 +19,8 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format } from 'date-fns';
+import { safeFormatDate } from '@/utils/date';
 import { it } from 'date-fns/locale'
 
 export default function FornitoriPage() {
@@ -132,11 +133,15 @@ export default function FornitoriPage() {
   }
 
   const getTipoIcon = (tipo) => {
-    return tipo === 'luce' ? Zap : Flame
+    // Normalizza il tipo in maiuscolo per il confronto
+    const tipoUpper = tipo ? tipo.toUpperCase() : ''
+    return tipoUpper === 'LUCE' ? Zap : Flame
   }
 
   const getTipoColor = (tipo) => {
-    return tipo === 'luce' ? 'text-yellow-600' : 'text-blue-600'
+    // Normalizza il tipo in maiuscolo per il confronto
+    const tipoUpper = tipo ? tipo.toUpperCase() : ''
+    return tipoUpper === 'LUCE' ? 'text-yellow-600' : 'text-blue-600'
   }
 
   if (status === 'loading' || loading) {
@@ -331,7 +336,7 @@ export default function FornitoriPage() {
                             <div className="flex items-center">
                               <TipoIcon className={`h-4 w-4 mr-2 ${getTipoColor(fornitore.tipo)}`} />
                               <span className="capitalize">
-                                {fornitore.tipo === 'luce' ? 'Energia Elettrica' : 'Gas'}
+                                {fornitore.tipo && fornitore.tipo.toUpperCase() === 'LUCE' ? 'Energia Elettrica' : 'Gas'}
                               </span>
                             </div>
                           </td>
@@ -354,7 +359,7 @@ export default function FornitoriPage() {
                           </td>
                           <td>
                             <span className="text-sm text-gray-600">
-                              {format(new Date(fornitore.createdAt), 'dd/MM/yyyy')}
+                              {safeFormatDate(fornitore.createdAt)}
                             </span>
                           </td>
                           <td>

@@ -22,41 +22,36 @@ async function main() {
 
   console.log('✅ Utente admin creato:', admin.email)
 
+  // Elimina fornitori esistenti e ricrea
+  await prisma.fornitore.deleteMany({})
+  
   // Crea fornitori di esempio
   const fornitori = await Promise.all([
-    prisma.fornitore.upsert({
-      where: { ragioneSociale: 'Enel Energia' },
-      update: {},
-      create: {
+    prisma.fornitore.create({
+      data: {
         ragioneSociale: 'Enel Energia',
-        tipo: 'luce',
+        tipo: 'LUCE',
         note: 'Fornitore principale per energia elettrica'
       }
     }),
-    prisma.fornitore.upsert({
-      where: { ragioneSociale: 'Eni Gas e Luce' },
-      update: {},
-      create: {
+    prisma.fornitore.create({
+      data: {
         ragioneSociale: 'Eni Gas e Luce',
-        tipo: 'gas',
+        tipo: 'GAS',
         note: 'Fornitore principale per gas naturale'
       }
     }),
-    prisma.fornitore.upsert({
-      where: { ragioneSociale: 'A2A Energia' },
-      update: {},
-      create: {
+    prisma.fornitore.create({
+      data: {
         ragioneSociale: 'A2A Energia',
-        tipo: 'luce',
+        tipo: 'LUCE',
         note: 'Fornitore alternativo per energia elettrica'
       }
     }),
-    prisma.fornitore.upsert({
-      where: { ragioneSociale: 'Edison Energia' },
-      update: {},
-      create: {
+    prisma.fornitore.create({
+      data: {
         ragioneSociale: 'Edison Energia',
-        tipo: 'gas',
+        tipo: 'GAS',
         note: 'Fornitore alternativo per gas naturale'
       }
     })
@@ -123,94 +118,94 @@ async function main() {
   const contratti = []
 
   // Contratto 1 - Mario Rossi con Enel (in scadenza tra 15 giorni)
-  const dataInizio1 = new Date()
-  dataInizio1.setFullYear(oggi.getFullYear() - 2)
-  const dataFine1 = new Date()
-  dataFine1.setDate(oggi.getDate() + 15)
-  const dataPenaltyFree1 = new Date(dataFine1)
-  dataPenaltyFree1.setDate(dataFine1.getDate() - 60)
-  const dataRaccomandataCambio1 = new Date(dataFine1)
-  dataRaccomandataCambio1.setDate(dataFine1.getDate() - 30)
+  const startDate1 = new Date()
+  startDate1.setFullYear(oggi.getFullYear() - 2)
+  const expiryDate1 = new Date()
+  expiryDate1.setDate(oggi.getDate() + 15)
+  const penaltyFreeDate1 = new Date(expiryDate1)
+  penaltyFreeDate1.setDate(expiryDate1.getDate() - 60)
+  const recommendedDate1 = new Date(expiryDate1)
+  recommendedDate1.setDate(expiryDate1.getDate() - 30)
 
   contratti.push(await prisma.contratto.create({
     data: {
       clienteId: clienti[0].id,
       fornitoreId: fornitori[0].id,
-      dataInizio: dataInizio1,
-      dataFine: dataFine1,
+      startDate: startDate1,
       durataMesi: 24,
-      periodoGratisMesi: 2,
-      dataPenaltyFree: dataPenaltyFree1,
-      dataRaccomandataCambio: dataRaccomandataCambio1
+      penaltyFreeAfterMesi: 6,
+      penaltyFreeDate: penaltyFreeDate1,
+      recommendedDate: recommendedDate1,
+      expiryDate: expiryDate1
     }
   }))
 
   // Contratto 2 - Giulia Bianchi con Eni (penalty free oggi)
-  const dataInizio2 = new Date()
-  dataInizio2.setFullYear(oggi.getFullYear() - 1)
-  dataInizio2.setMonth(oggi.getMonth() - 10)
-  const dataFine2 = new Date()
-  dataFine2.setMonth(oggi.getMonth() + 2)
-  const dataPenaltyFree2 = new Date(oggi)
-  const dataRaccomandataCambio2 = new Date()
-  dataRaccomandataCambio2.setMonth(oggi.getMonth() + 1)
+  const startDate2 = new Date()
+  startDate2.setFullYear(oggi.getFullYear() - 1)
+  startDate2.setMonth(oggi.getMonth() - 10)
+  const expiryDate2 = new Date()
+  expiryDate2.setMonth(oggi.getMonth() + 2)
+  const penaltyFreeDate2 = new Date(oggi)
+  const recommendedDate2 = new Date()
+  recommendedDate2.setMonth(oggi.getMonth() + 1)
 
   contratti.push(await prisma.contratto.create({
     data: {
       clienteId: clienti[1].id,
       fornitoreId: fornitori[1].id,
-      dataInizio: dataInizio2,
-      dataFine: dataFine2,
+      startDate: startDate2,
       durataMesi: 12,
-      periodoGratisMesi: 2,
-      dataPenaltyFree: dataPenaltyFree2,
-      dataRaccomandataCambio: dataRaccomandataCambio2
+      penaltyFreeAfterMesi: 6,
+      penaltyFreeDate: penaltyFreeDate2,
+      recommendedDate: recommendedDate2,
+      expiryDate: expiryDate2
     }
   }))
 
   // Contratto 3 - Luca Verdi con A2A (cambio raccomandato oggi)
-  const dataInizio3 = new Date()
-  dataInizio3.setFullYear(oggi.getFullYear() - 1)
-  dataInizio3.setMonth(oggi.getMonth() - 11)
-  const dataFine3 = new Date()
-  dataFine3.setMonth(oggi.getMonth() + 1)
-  const dataPenaltyFree3 = new Date()
-  dataPenaltyFree3.setMonth(oggi.getMonth() - 1)
-  const dataRaccomandataCambio3 = new Date(oggi)
+  const startDate3 = new Date()
+  startDate3.setFullYear(oggi.getFullYear() - 1)
+  startDate3.setMonth(oggi.getMonth() - 11)
+  const expiryDate3 = new Date()
+  expiryDate3.setMonth(oggi.getMonth() + 1)
+  const penaltyFreeDate3 = new Date()
+  penaltyFreeDate3.setMonth(oggi.getMonth() - 1)
+  const recommendedDate3 = new Date(oggi)
 
   contratti.push(await prisma.contratto.create({
     data: {
       clienteId: clienti[2].id,
       fornitoreId: fornitori[2].id,
-      dataInizio: dataInizio3,
-      dataFine: dataFine3,
+      startDate: startDate3,
       durataMesi: 12,
-      periodoGratisMesi: 2,
-      dataPenaltyFree: dataPenaltyFree3,
-      dataRaccomandataCambio: dataRaccomandataCambio3
+      penaltyFreeAfterMesi: 6,
+      penaltyFreeDate: penaltyFreeDate3,
+      recommendedDate: recommendedDate3,
+      expiryDate: expiryDate3
     }
   }))
 
   // Contratto 4 - Anna Neri con Edison (attivo)
-  const dataInizio4 = new Date()
-  dataInizio4.setMonth(oggi.getMonth() - 6)
-  const dataFine4 = new Date()
-  dataFine4.setMonth(oggi.getMonth() + 18)
-  const dataPenaltyFree4 = new Date()
-  dataPenaltyFree4.setMonth(oggi.getMonth() + 16)
-  const dataRaccomandataCambio4 = new Date()
-  dataRaccomandataCambio4.setMonth(oggi.getMonth() + 17)
+  const startDate4 = new Date()
+  startDate4.setMonth(oggi.getMonth() - 6)
+  const expiryDate4 = new Date()
+  expiryDate4.setMonth(oggi.getMonth() + 18)
+  const penaltyFreeDate4 = new Date()
+  penaltyFreeDate4.setMonth(oggi.getMonth() + 16)
+  const recommendedDate4 = new Date()
+  recommendedDate4.setMonth(oggi.getMonth() + 17)
 
   contratti.push(await prisma.contratto.create({
     data: {
       clienteId: clienti[3].id,
       fornitoreId: fornitori[3].id,
-      dataInizio: dataInizio4,
-      dataFine: dataFine4,
+      startDate: startDate4,
       durataMesi: 24,
-      periodoGratisMesi: 2,
-      dataPenaltyFree: dataPenaltyFree4,
-      dataRaccomandataCambio: dataRaccomandataCambio4
+      penaltyFreeAfterMesi: 6,
+      penaltyFreeDate: penaltyFreeDate4,
+      recommendedDate: recommendedDate4,
+      expiryDate: expiryDate4
     }
   }))
 

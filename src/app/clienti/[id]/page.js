@@ -22,14 +22,13 @@ import {
   FileText,
   Bell
 } from 'lucide-react'
-import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
+import { safeFormatDate } from '@/utils/date'
 
 export default function ClienteDettaglio() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const params = useParams()
-  const clienteId = params.id
+  const clienteId = params?.id
   
   const [cliente, setCliente] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -85,17 +84,39 @@ export default function ClienteDettaglio() {
     }
   }
 
+  // Funzione per ottenere lo stato del contratto con gestione sicura delle date
   const getContractStatus = (contratto) => {
-    const today = new Date()
-    const startDate = new Date(contratto.startDate)
-    const expiryDate = new Date(contratto.expiryDate)
-    const penaltyFreeDate = new Date(contratto.penaltyFreeDate)
-    const recommendedDate = new Date(contratto.recommendedDate)
-    
-    if (today > expiryDate) return { status: 'scaduto', color: 'badge-danger' }
-    if (today >= recommendedDate) return { status: 'cambio-consigliato', color: 'badge-warning' }
-    if (today >= penaltyFreeDate) return { status: 'penalty-free', color: 'badge-info' }
-    return { status: 'attivo', color: 'badge-success' }
+    try {
+      const now = new Date()
+      
+      // Verifica che le date siano valide
+      let expiryDate, penaltyFreeDate, recommendedDate
+      
+      try {
+        expiryDate = contratto.expiryDate ? new Date(contratto.expiryDate) : null
+        penaltyFreeDate = contratto.penaltyFreeDate ? new Date(contratto.penaltyFreeDate) : null
+        recommendedDate = contratto.recommendedDate ? new Date(contratto.recommendedDate) : null
+        
+        // Verifica che le date siano valide
+        if (expiryDate && isNaN(expiryDate.getTime())) expiryDate = null
+        if (penaltyFreeDate && isNaN(penaltyFreeDate.getTime())) penaltyFreeDate = null
+        if (recommendedDate && isNaN(recommendedDate.getTime())) recommendedDate = null
+      } catch (error) {
+        console.error('Errore nella conversione delle date:', error)
+        return { status: 'errore-data', color: 'badge-danger' }
+      }
+      
+      // Se la data di scadenza non è valida, mostriamo un errore
+      if (!expiryDate) return { status: 'data-invalida', color: 'badge-danger' }
+      
+      if (now > expiryDate) return { status: 'scaduto', color: 'badge-danger' }
+      if (recommendedDate && now >= recommendedDate) return { status: 'cambio-consigliato', color: 'badge-warning' }
+      if (penaltyFreeDate && now >= penaltyFreeDate) return { status: 'penalty-free', color: 'badge-info' }
+      return { status: 'attivo', color: 'badge-success' }
+    } catch (error) {
+      console.error('Errore nel calcolo dello stato del contratto:', error)
+      return { status: 'errore', color: 'badge-danger' }
+    }
   }
 
   const getNotificationTypeLabel = (tipo) => {
@@ -246,11 +267,11 @@ export default function ClienteDettaglio() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Inizio:</span>
-                  <span>{format(new Date(cliente.contrattoAttivo.startDate), 'dd/MM/yyyy')}</span>
+                  <span>{safeFormatDate(cliente.contrattoAttivo.startDate)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Scadenza:</span>
-                  <span>{format(new Date(cliente.contrattoAttivo.expiryDate), 'dd/MM/yyyy')}</span>
+                  <span>{safeFormatDate(cliente.contrattoAttivo.expiryDate)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Stato:</span>
@@ -293,18 +314,18 @@ export default function ClienteDettaglio() {
                 <span className="text-gray-600">Contratti Attivi:</span>
                 <span className="font-medium">{cliente.contrattiAttivi}</span>
               </div>
-              {cliente.prossimaScadenza && (
+              {cliente.prossimaScadenza && cliente.prossimaScadenza !== null && (
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Prossima Scadenza:</span>
                   <span className="font-medium">
-                    {format(new Date(cliente.prossimaScadenza), 'dd/MM/yyyy')}
+                    {safeFormatDate(cliente.prossimaScadenza)}
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Cliente dal:</span>
                 <span className="font-medium">
-                  {format(new Date(cliente.createdAt), 'dd/MM/yyyy')}
+                  {safeFormatDate(cliente.createdAt)}
                 </span>
               </div>
             </div>
@@ -387,9 +408,9 @@ export default function ClienteDettaglio() {
                               </td>
                               <td>
                                 <div className="text-sm">
-                                  <div>{format(new Date(contratto.startDate), 'dd/MM/yyyy')}</div>
+                                  <div>{safeFormatDate(contratto.startDate)}</div>
                                   <div className="text-gray-500">
-                                    {format(new Date(contratto.expiryDate), 'dd/MM/yyyy')}
+                                    {safeFormatDate(contratto.expiryDate)}
                                   </div>
                                 </div>
                               </td>
@@ -447,7 +468,7 @@ export default function ClienteDettaglio() {
                             </span>
                           </div>
                           <span className="text-sm text-gray-500">
-                            {format(new Date(notifica.createdAt), 'dd/MM/yyyy HH:mm')}
+                            {safeFormatDate(notifica.createdAt, 'dd/MM/yyyy HH:mm')}
                           </span>
                         </div>
                         
@@ -455,7 +476,7 @@ export default function ClienteDettaglio() {
                           <p>Contratto: {notifica.contratto.fornitore.ragioneSociale}</p>
                           <p>Canale: {notifica.channel}</p>
                           {notifica.scheduledDate && (
-                            <p>Programmata per: {format(new Date(notifica.scheduledDate), 'dd/MM/yyyy')}</p>
+                            <p>Programmata per: {safeFormatDate(notifica.scheduledDate, 'dd/MM/yyyy HH:mm')}</p>
                           )}
                         </div>
                       </div>

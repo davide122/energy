@@ -19,7 +19,8 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format } from 'date-fns';
+import { safeFormatDate } from '@/utils/date';
 import { it } from 'date-fns/locale'
 
 export default function ClientiPage() {
@@ -322,7 +323,7 @@ export default function ClientiPage() {
                               <div className="flex items-center text-sm">
                                 <Calendar className="h-3 w-3 mr-1" />
                                 <span>
-                                  {format(new Date(cliente.contrattoAttivo.expiryDate), 'dd/MM/yyyy')}
+                                  {safeFormatDate(cliente.contrattoAttivo.expiryDate)}
                                 </span>
                               </div>
                             ) : (

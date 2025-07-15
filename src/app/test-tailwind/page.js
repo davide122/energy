@@ -1,6 +1,9 @@
+import Layout from '../../components/Layout'
+
 export default function TestTailwind() {
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
+    <Layout>
+      <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-blue-600 mb-8">Test Tailwind CSS</h1>
         
@@ -66,6 +69,6 @@ export default function TestTailwind() {
           </div>
         </div>
       </div>
-    </div>
+    </Layout>
   )
 }

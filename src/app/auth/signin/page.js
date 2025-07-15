@@ -50,7 +50,7 @@ export default function SignIn() {
             <Zap className="h-8 w-8 text-white" />
           </div>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            CRM Gestione Energiee
+            CRM Gestione Energie
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Accedi al tuo account per gestire i contratti

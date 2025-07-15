@@ -6,6 +6,9 @@ import { redirect, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import SendNotificationForm from './SendNotificationForm'
+import AINotificationForm from './AINotificationForm'
+import AIOffersCard from './AIOffersCard'
 import {
   ArrowLeft,
   Edit,
@@ -23,10 +26,12 @@ import {
   Flame,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  Sparkles
 } from 'lucide-react'
 import { format, differenceInDays } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { safeFormatDate } from '@/utils/date'
 
 export default function ContrattoDettaglio() {
   const { data: session, status: sessionStatus } = useSession()
@@ -92,24 +97,42 @@ export default function ContrattoDettaglio() {
     if (!contratto) return null
     
     const today = new Date()
-    const expiryDate = new Date(contratto.expiryDate)
-    const penaltyFreeDate = new Date(contratto.penaltyFreeDate)
-    const recommendedDate = new Date(contratto.recommendedDate)
+    let expiryDate, penaltyFreeDate, recommendedDate;
+    try {
+      expiryDate = contratto.expiryDate ? new Date(contratto.expiryDate) : null;
+      penaltyFreeDate = contratto.penaltyFreeDate ? new Date(contratto.penaltyFreeDate) : null;
+      recommendedDate = contratto.recommendedDate ? new Date(contratto.recommendedDate) : null;
+      
+      // Verifica che le date siano valide
+      if (expiryDate && isNaN(expiryDate.getTime())) expiryDate = null;
+      if (penaltyFreeDate && isNaN(penaltyFreeDate.getTime())) penaltyFreeDate = null;
+      if (recommendedDate && isNaN(recommendedDate.getTime())) recommendedDate = null;
+    } catch (error) {
+      console.error('Errore nella conversione delle date:', error);
+      return { status: 'errore', color: 'badge-danger', icon: AlertTriangle, message: 'Errore date contratto' };
+    }
+    
+    if (!expiryDate) return { status: 'errore', color: 'badge-danger', icon: AlertTriangle, message: 'Data scadenza non valida' };
+    
     const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
     
     if (daysLeft <= 0) return { status: 'scaduto', color: 'badge-danger', icon: AlertTriangle, message: 'Contratto scaduto' }
     if (daysLeft <= 30) return { status: 'in-scadenza', color: 'badge-warning', icon: AlertTriangle, message: `Scade tra ${daysLeft} giorni` }
-    if (today >= recommendedDate) return { status: 'cambio-consigliato', color: 'badge-info', icon: Clock, message: 'Cambio consigliato' }
-    if (today >= penaltyFreeDate) return { status: 'penalty-free', color: 'badge-info', icon: CheckCircle, message: 'Penalty free attivo' }
+    if (recommendedDate && today >= recommendedDate) return { status: 'cambio-consigliato', color: 'badge-info', icon: Clock, message: 'Cambio consigliato' }
+    if (penaltyFreeDate && today >= penaltyFreeDate) return { status: 'penalty-free', color: 'badge-info', icon: CheckCircle, message: 'Penalty free attivo' }
     return { status: 'attivo', color: 'badge-success', icon: CheckCircle, message: 'Contratto attivo' }
   }
 
   const getTipoIcon = (tipo) => {
-    return tipo === 'luce' ? Zap : Flame
+    // Normalizza il tipo in minuscolo per il confronto
+    const tipoLower = tipo ? tipo.toLowerCase() : ''
+    return tipoLower === 'luce' ? Zap : Flame
   }
 
   const getTipoColor = (tipo) => {
-    return tipo === 'luce' ? 'text-yellow-600' : 'text-blue-600'
+    // Normalizza il tipo in minuscolo per il confronto
+    const tipoLower = tipo ? tipo.toLowerCase() : ''
+    return tipoLower === 'luce' ? 'text-yellow-600' : 'text-blue-600'
   }
 
   const getNotificationStatusColor = (status) => {
@@ -266,13 +289,13 @@ export default function ContrattoDettaglio() {
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Data inizio:</span>
                 <span className="font-medium">
-                  {format(new Date(contratto.startDate), 'dd/MM/yyyy')}
+                  {safeFormatDate(contratto.startDate)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Data scadenza:</span>
                 <span className="font-medium">
-                  {format(new Date(contratto.expiryDate), 'dd/MM/yyyy')}
+                  {safeFormatDate(contratto.expiryDate)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -287,13 +310,13 @@ export default function ContrattoDettaglio() {
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Penalty free dal:</span>
                   <span className="font-medium">
-                    {format(new Date(contratto.penaltyFreeDate), 'dd/MM/yyyy')}
+                    {safeFormatDate(contratto.penaltyFreeDate)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-gray-600">Cambio consigliato dal:</span>
                   <span className="font-medium">
-                    {format(new Date(contratto.recommendedDate), 'dd/MM/yyyy')}
+                    {safeFormatDate(contratto.recommendedDate)}
                   </span>
                 </div>
               </div>
@@ -364,11 +387,11 @@ export default function ContrattoDettaglio() {
               </div>
               <div className="flex items-center space-x-2">
                 <span className={`text-xs px-2 py-1 rounded ${
-                  contratto.fornitore.tipo === 'luce' 
+                  contratto.fornitore.tipo && contratto.fornitore.tipo.toUpperCase() === 'LUCE' 
                     ? 'bg-yellow-100 text-yellow-800' 
                     : 'bg-blue-100 text-blue-800'
                 }`}>
-                  {contratto.fornitore.tipo === 'luce' ? 'Energia Elettrica' : 'Gas'}
+                  {contratto.fornitore.tipo && contratto.fornitore.tipo.toUpperCase() === 'LUCE' ? 'Energia Elettrica' : 'Gas'}
                 </span>
               </div>
               {contratto.fornitore.note && (
@@ -482,6 +505,39 @@ export default function ContrattoDettaglio() {
                 Notifiche ({contratto.notifiche?.length || 0})
               </button>
               <button
+                onClick={() => setActiveTab('sendNotification')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'sendNotification'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Mail className="h-4 w-4 inline mr-2" />
+                Invia Notifica
+              </button>
+              <button
+                onClick={() => setActiveTab('aiNotification')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'aiNotification'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Sparkles className="h-4 w-4 inline mr-2" />
+                Notifica AI
+              </button>
+              <button
+                onClick={() => setActiveTab('aiOffers')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'aiOffers'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Sparkles className="h-4 w-4 inline mr-2" />
+                Offerte AI
+              </button>
+              <button
                 onClick={() => setActiveTab('history')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'history'
@@ -505,23 +561,30 @@ export default function ContrattoDettaglio() {
                       <div>
                         <p className="text-sm text-gray-600">Periodo contrattuale</p>
                         <p className="font-medium">
-                          {format(new Date(contratto.startDate), 'dd/MM/yyyy')} - {format(new Date(contratto.expiryDate), 'dd/MM/yyyy')}
+                          {contratto.startDate && !isNaN(new Date(contratto.startDate).getTime()) 
+                            ? safeFormatDate(contratto.startDate)
+                            : 'Data non valida'} - 
+                          {contratto.expiryDate && !isNaN(new Date(contratto.expiryDate).getTime()) 
+                            ? safeFormatDate(contratto.expiryDate)
+                            : 'Data non valida'}
                         </p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Durata totale</p>
-                        <p className="font-medium">{contratto.durataMesi} mesi</p>
+                        <p className="font-medium">{contratto.durataMesi || 0} mesi</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Giorni trascorsi</p>
                         <p className="font-medium">
-                          {Math.max(0, differenceInDays(new Date(), new Date(contratto.startDate)))} giorni
+                          {contratto.startDate && !isNaN(new Date(contratto.startDate).getTime())
+                            ? Math.max(0, differenceInDays(new Date(), new Date(contratto.startDate)))
+                            : 0} giorni
                         </p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Giorni rimanenti</p>
                         <p className="font-medium">
-                          {Math.max(0, daysToExpiry)} giorni
+                          {Math.max(0, daysToExpiry || 0)} giorni
                         </p>
                       </div>
                     </div>
@@ -558,14 +621,14 @@ export default function ContrattoDettaglio() {
                             </span>
                           </div>
                           <span className="text-sm text-gray-500">
-                            {format(new Date(notifica.scheduledDate), 'dd/MM/yyyy')}
+                            {safeFormatDate(notifica.scheduledDate)}
                           </span>
                         </div>
                         
                         <div className="text-sm text-gray-600">
                           <p>Canale: {notifica.channel}</p>
                           {notifica.sentAt && (
-                            <p>Inviata il: {format(new Date(notifica.sentAt), 'dd/MM/yyyy HH:mm')}</p>
+                            <p>Inviata il: {safeFormatDate(notifica.sentAt, 'dd/MM/yyyy HH:mm')}</p>
                           )}
                           {notifica.error && (
                             <p className="text-red-600 mt-1">Errore: {notifica.error}</p>
@@ -594,13 +657,13 @@ export default function ContrattoDettaglio() {
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-medium">Modifica contratto</span>
                           <span className="text-sm text-gray-500">
-                            {format(new Date(storico.createdAt), 'dd/MM/yyyy HH:mm')}
+                            {safeFormatDate(storico.createdAt, 'dd/MM/yyyy HH:mm')}
                           </span>
                         </div>
                         
                         <div className="text-sm text-gray-600">
                           <p>Fornitore: {storico.fornitore?.ragioneSociale}</p>
-                          <p>Periodo: {format(new Date(storico.startDate), 'dd/MM/yyyy')} - {format(new Date(storico.endDate), 'dd/MM/yyyy')}</p>
+                          <p>Periodo: {safeFormatDate(storico.startDate)} - {safeFormatDate(storico.endDate)}</p>
                         </div>
                       </div>
                     ))}
@@ -612,6 +675,18 @@ export default function ContrattoDettaglio() {
                   </div>
                 )}
               </div>
+            )}
+            
+            {activeTab === 'sendNotification' && (
+              <SendNotificationForm contratto={contratto} onNotificationSent={fetchContratto} />
+            )}
+            
+            {activeTab === 'aiNotification' && (
+              <AINotificationForm contratto={contratto} onNotificationSent={fetchContratto} />
+            )}
+            
+            {activeTab === 'aiOffers' && (
+              <AIOffersCard clienteId={contratto.clienteId} contratti={[contratto]} />
             )}
           </div>
         </div>

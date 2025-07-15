@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+// import { formatDate, safeFormatDate } from '@/utils/date'
 
 export default function FornitoreDettaglio() {
   const { data: session, status } = useSession()
@@ -86,9 +87,26 @@ export default function FornitoreDettaglio() {
 
   const getContractStatus = (contratto) => {
     const today = new Date()
-    const expiryDate = new Date(contratto.expiryDate)
-    const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
     
+    // Verifica che la data di scadenza sia valida
+    let expiryDate;
+    try {
+      expiryDate = contratto.expiryDate ? new Date(contratto.expiryDate) : null;
+      
+      // Verifica che la data sia valida
+      if (expiryDate && isNaN(expiryDate.getTime())) expiryDate = null;
+    } catch (error) {
+      console.error('Errore nella conversione della data di scadenza:', error);
+      expiryDate = null;
+    }
+    
+    // Calcola i giorni alla scadenza solo se expiryDate è valida
+    let daysLeft = 0;
+    if (expiryDate) {
+      daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+    }
+    
+    if (!expiryDate) return { status: 'data-non-valida', color: 'badge-error', days: 0 }
     if (daysLeft <= 0) return { status: 'scaduto', color: 'badge-danger', days: daysLeft }
     if (daysLeft <= 30) return { status: 'in-scadenza', color: 'badge-warning', days: daysLeft }
     if (daysLeft <= 90) return { status: 'prossima-scadenza', color: 'badge-info', days: daysLeft }
@@ -96,15 +114,21 @@ export default function FornitoreDettaglio() {
   }
 
   const getTipoIcon = (tipo) => {
-    return tipo === 'luce' ? Zap : Flame
+    // Normalizza il tipo in maiuscolo per il confronto
+    const tipoUpper = tipo ? tipo.toUpperCase() : ''
+    return tipoUpper === 'LUCE' ? Zap : Flame
   }
 
   const getTipoColor = (tipo) => {
-    return tipo === 'luce' ? 'text-yellow-600' : 'text-blue-600'
+    // Normalizza il tipo in maiuscolo per il confronto
+    const tipoUpper = tipo ? tipo.toUpperCase() : ''
+    return tipoUpper === 'LUCE' ? 'text-yellow-600' : 'text-blue-600'
   }
 
   const getTipoLabel = (tipo) => {
-    return tipo === 'luce' ? 'Energia Elettrica' : 'Gas'
+    // Normalizza il tipo in maiuscolo per il confronto
+    const tipoUpper = tipo ? tipo.toUpperCase() : ''
+    return tipoUpper === 'LUCE' ? 'Energia Elettrica' : 'Gas'
   }
 
   if (status === 'loading' || loading) {
@@ -253,13 +277,13 @@ export default function FornitoreDettaglio() {
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Creato il:</span>
                 <span className="font-medium">
-                  {format(new Date(fornitore.createdAt), 'dd/MM/yyyy')}
+                  DEBUG: Data commentata {/* {safeFormatDate(fornitore.createdAt)} */}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Ultimo aggiornamento:</span>
                 <span className="font-medium">
-                  {format(new Date(fornitore.updatedAt), 'dd/MM/yyyy')}
+                  DEBUG: Data commentata {/* {safeFormatDate(fornitore.updatedAt)} */}
                 </span>
               </div>
               {fornitore.note && (
@@ -391,9 +415,9 @@ export default function FornitoreDettaglio() {
                               </td>
                               <td>
                                 <div className="text-sm">
-                                  <div>{format(new Date(contratto.startDate), 'dd/MM/yyyy')}</div>
-                                  <div className="text-gray-500">
-                                    {format(new Date(contratto.expiryDate), 'dd/MM/yyyy')}
+                                  <div>DEBUG: Data commentata {/* {safeFormatDate(contratto.startDate)} */}</div>
+                        <div className="text-gray-500">
+                          DEBUG: Data commentata {/* {safeFormatDate(contratto.expiryDate)} */}
                                   </div>
                                 </div>
                               </td>
@@ -456,12 +480,12 @@ export default function FornitoreDettaglio() {
                             </span>
                           </div>
                           <span className="text-sm text-gray-500">
-                            {format(new Date(storico.createdAt), 'dd/MM/yyyy')}
+                            DEBUG: Data commentata {/* {safeFormatDate(storico.createdAt)} */}
                           </span>
                         </div>
                         
                         <div className="text-sm text-gray-600">
-                          <p>Periodo: {format(new Date(storico.startDate), 'dd/MM/yyyy')} - {format(new Date(storico.endDate), 'dd/MM/yyyy')}</p>
+                          <p>Periodo: DEBUG: Data commentata {/* {safeFormatDate(storico.startDate)} */} - DEBUG: Data commentata {/* {safeFormatDate(storico.endDate)} */}</p>
                           <p>Durata: {Math.ceil((new Date(storico.endDate) - new Date(storico.startDate)) / (1000 * 60 * 60 * 24 * 30))} mesi</p>
                         </div>
                       </div>

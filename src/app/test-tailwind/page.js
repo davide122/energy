@@ -4,7 +4,7 @@ export default function TestTailwind() {
   return (
     <Layout>
       <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-blue-600 mb-8">Test Tailwind CSS</h1>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -68,6 +68,7 @@ export default function TestTailwind() {
             <button className="btn-danger">Pericolo</button>
           </div>
         </div>
+      </div>
       </div>
     </Layout>
   )
